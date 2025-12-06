@@ -6,9 +6,10 @@ use App\Models\Slot;
 use App\Models\TelegramState;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Http;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Http;
 
 class TelegramBotController extends Controller
 {
@@ -65,7 +66,17 @@ class TelegramBotController extends Controller
     }
     
     /* ================== STATE ================== */
+    private const CACHE_MAINTENANCE_KEY = 'pizza_bot.maintenance';
     
+    protected function isMaintenance(): bool
+    {
+        return (bool) Cache::get(self::CACHE_MAINTENANCE_KEY, false);
+    }
+    
+    protected function setMaintenance(bool $on): void
+    {
+        Cache::forever(self::CACHE_MAINTENANCE_KEY, $on);
+    }
     protected function loadState(int $userId): ?array
     {
         $state = TelegramState::find($userId);
@@ -103,6 +114,8 @@ class TelegramBotController extends Controller
         );
         $text = trim($message['text'] ?? '');
         $state = $this->loadState($userId);
+        $adminChatId = (int) config('services.telegram.admin_chat_id');
+        
         
         if ($state && ($state['step'] ?? null) === 'comment') {
             $comment = trim($text);
@@ -211,6 +224,52 @@ class TelegramBotController extends Controller
             $chatId,
             "Я вас не понял.\nНажмите «Показать свободные слоты» или команду /my."
         );
+        
+        // 1) Сначала — спецкоманда /admin_techworks, она должна работать даже в режиме техработ
+        if (str_starts_with($text, '/admin_techworks')) {
+            if ($chatId !== $adminChatId) {
+                $this->sendMessage($chatId, 'Эта команда только для владельца.');
+                return;
+            }
+            
+            $parts = preg_split('/\s+/', $text);
+            $mode  = strtolower($parts[1] ?? '');
+            
+            if ($mode === 'disable') {
+                $this->setMaintenance(true);
+                $this->sendMessage(
+                    $chatId,
+                    "🚧 Режим технического обслуживания ВКЛЮЧЕН.\n" .
+                    "Бот временно не принимает новые заказы."
+                );
+            } elseif ($mode === 'enable') {
+                $this->setMaintenance(false);
+                $this->sendMessage(
+                    $chatId,
+                    "✅ Режим технического обслуживания ВЫКЛЮЧЕН.\n" .
+                    "Бот снова принимает заказы."
+                );
+            } else {
+                $this->sendMessage(
+                    $chatId,
+                    "Использование: /admin_techworks enable|disable\n" .
+                    "• enable — включить бота\n" .
+                    "• disable — включить режим техобслуживания 🚧"
+                );
+            }
+            
+            return;
+        }
+        
+        // 2) Если техработы включены — ВСЕ остальные пользователи получают заглушку
+        if ($this->isMaintenance() && $chatId !== $adminChatId) {
+            $this->sendMessage(
+                $chatId,
+                "🚧 Извините, мы сейчас на техническом обслуживании.\n" .
+                "Попробуйте чуть позже 🙏"
+            );
+            return;
+        }
     }
     
     protected function handleCallback(array $callback): void
@@ -222,6 +281,21 @@ class TelegramBotController extends Controller
             ($callback['from']['first_name'] ?? '') . ' ' . ($callback['from']['last_name'] ?? '')
         );
         $cbId = $callback['id'];
+        
+        $adminChatId = (int) config('services.telegram.admin_chat_id');
+        
+        if ($chatId && $this->isMaintenance() && $chatId !== $adminChatId) {
+            $cbId = $callback['id'] ?? null;
+            if ($cbId) {
+                $this->answerCallback($cbId);
+            }
+            $this->sendMessage(
+                $chatId,
+                "🚧 Извините, мы сейчас на техническом обслуживании.\n" .
+                "Попробуйте чуть позже 🙏"
+            );
+            return;
+        }
         
         $this->answerCallback($cbId);
         $messageId = $callback['message']['message_id'] ?? null;
