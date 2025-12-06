@@ -7,6 +7,7 @@ use App\Models\TelegramState;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Carbon\Carbon;
 
 class TelegramBotController extends Controller
 {
@@ -153,6 +154,108 @@ class TelegramBotController extends Controller
         $cbId = $callback['id'];
         
         $this->answerCallback($cbId);
+        $messageId = $callback['message']['message_id'] ?? null;
+        
+        // выбор / снятие выбора слота по кнопке
+        if (str_starts_with($data, 'slot:')) {
+            $index = (int) substr($data, 5); // номера слотов 1..N
+            
+            $state = $this->loadState($userId);
+            if (!$state || $state['step'] !== 'select_slots') {
+                // старый апдейт / нет состояния
+                return;
+            }
+            
+            $slots  = $state['data']['slots'] ?? [];
+            if ($index < 1 || $index > count($slots)) {
+                return;
+            }
+            
+            $chosen = $state['data']['chosen_idx'] ?? [];
+            
+            if (in_array($index, $chosen, true)) {
+                // снимаем выбор
+                $chosen = array_values(array_diff($chosen, [$index]));
+            } else {
+                // добавляем
+                $chosen[] = $index;
+            }
+            sort($chosen);
+            
+            $state['data']['chosen_idx'] = $chosen;
+            $this->saveState($userId, 'select_slots', $state['data']);
+            
+            // обновляем клавиатуру в том же сообщении
+            if ($messageId) {
+                $keyboard = [
+                    'inline_keyboard' => $this->buildSlotsKeyboard($slots, $chosen),
+                ];
+                
+                $this->tg('editMessageReplyMarkup', [
+                    'chat_id' => $chatId,
+                    'message_id' => $messageId,
+                    'reply_markup' => json_encode($keyboard, JSON_UNESCAPED_UNICODE),
+                ]);
+            }
+            
+            return;
+        }
+        
+        // пользователь нажал "Готово"
+        if ($data === 'slots_done') {
+            $state = $this->loadState($userId);
+            if (!$state || $state['step'] !== 'select_slots') {
+                return;
+            }
+            
+            $slots = $state['data']['slots'] ?? [];
+            $idx   = $state['data']['chosen_idx'] ?? [];
+            
+            if (empty($idx)) {
+                $this->sendMessage($chatId, 'Вы не выбрали ни одного слота.');
+                return;
+            }
+            
+            sort($idx);
+            
+            // проверяем, что номера подряд
+            for ($i = 1; $i < count($idx); $i++) {
+                if ($idx[$i] !== $idx[$i - 1] + 1) {
+                    $this->sendMessage(
+                        $chatId,
+                        "Можно бронировать только подряд идущие слоты.\n" .
+                        "Выберите слоты снова."
+                    );
+                    return;
+                }
+            }
+            
+            $chosen = [];
+            foreach ($idx as $n) {
+                $chosen[] = $slots[$n - 1];
+            }
+            
+            $state['data']['chosen_idx'] = $idx;
+            $this->saveState($userId, 'confirm_1', $state['data']);
+            
+            $times = array_map(
+                fn($s) => Carbon::parse($s['slot_time'])->format('H:i'),
+                $chosen
+            );
+            
+            $text = "Вы выбрали слоты: " . implode(', ', $times) . "\n\nПодтверждаете бронь?";
+            $keyboard = [
+                'inline_keyboard' => [
+                    [
+                        ['text' => 'Отмена', 'callback_data' => 'cancel'],
+                        ['text' => 'Подтверждаю бронь', 'callback_data' => 'confirm1'],
+                    ],
+                ],
+            ];
+            
+            $this->sendMessage($chatId, $text, $keyboard);
+            return;
+        }
         
         if ($data === 'cancel') {
             $this->clearState($userId);
@@ -227,6 +330,12 @@ class TelegramBotController extends Controller
             ->orderBy('slot_time')
             ->limit(6)
             ->get(['id', 'slot_time'])
+            ->map(function (Slot $slot) {
+                return [
+                    'id' => $slot->id,
+                    'slot_time' => $slot->slot_time->toDateTimeString(),
+                ];
+            })
             ->values()
             ->all();
         
@@ -235,20 +344,28 @@ class TelegramBotController extends Controller
             return;
         }
         
-        $this->saveState($userId, 'select_slots', ['slots' => $slots]);
+        // сохраняем слоты и пока пустой выбор
+        $this->saveState($userId, 'select_slots', [
+            'slots' => $slots,
+            'chosen_idx' => [],
+        ]);
         
         $lines = ['Свободные слоты:'];
         foreach ($slots as $i => $slot) {
-            $num = $i + 1;
-            $lines[] = $num . ') ' . $slot['slot_time']->format('H:i');
+            $num  = $i + 1;
+            $time = Carbon::parse($slot['slot_time'])->format('H:i');
+            $lines[] = "{$num}) {$time}";
         }
         $lines[] = '';
-        $lines[] = 'Напишите цифрами ПОДРЯД номера слотов, которые хотите занять.';
-        $lines[] = 'Примеры: <code>1</code>, <code>12</code>, <code>123</code>';
-        $lines[] = '(можно бронировать только подряд идущие слоты)';
+        $lines[] = 'Нажмите на кнопки со слотами, которые хотите занять, затем на «Готово».';
         
-        $this->sendMessage($chatId, implode("\n", $lines));
+        $replyMarkup = [
+            'inline_keyboard' => $this->buildSlotsKeyboard($slots, []),
+        ];
+        
+        $this->sendMessage($chatId, implode("\n", $lines), $replyMarkup);
     }
+    
     
     protected function handleSlotDigits($chatId, int $userId, string $username, string $digits): void
     {
@@ -313,6 +430,45 @@ class TelegramBotController extends Controller
         ];
         
         $this->sendMessage($chatId, $text, $keyboard);
+    }
+    /**
+     * Строим inline-клавиатуру для выбора слотов.
+     *
+     * @param array $slots       массив слотов из state ['id' => ..., 'slot_time' => 'Y-m-d H:i:s']
+     * @param array $selectedIdx номера выбранных слотов (1..N)
+     */
+    protected function buildSlotsKeyboard(array $slots, array $selectedIdx = []): array
+    {
+        $rows = [];
+        $row  = [];
+        
+        foreach ($slots as $i => $slot) {
+            $num  = $i + 1; // номер слота для пользователя
+            $time = Carbon::parse($slot['slot_time'])->format('H:i');
+            $selected = in_array($num, $selectedIdx, true);
+            
+            $row[] = [
+                'text' => ($selected ? '✅ ' : '') . $time,
+                'callback_data' => 'slot:' . $num,
+            ];
+            
+            if (count($row) === 3) {
+                $rows[] = $row;
+                $row = [];
+            }
+        }
+        
+        if (!empty($row)) {
+            $rows[] = $row;
+        }
+        
+        // последняя строка — действия
+        $rows[] = [
+            ['text' => 'Готово', 'callback_data' => 'slots_done'],
+            ['text' => 'Отмена', 'callback_data' => 'cancel'],
+        ];
+        
+        return $rows;
     }
     
     protected function confirmBooking($chatId, int $userId, string $username, array $data): void
