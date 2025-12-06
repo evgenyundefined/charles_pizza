@@ -635,6 +635,10 @@ class TelegramBotController extends Controller
             $this->showMyBookings($chatId, $userId, false);
             return;
         }
+        if ($data === 'menu_show_slots') {
+            $this->showFreeSlots($chatId, $userId);
+            return;
+        }
     }
     
     /* ================== UI / БИЗНЕС-ЛОГИКА ================== */
