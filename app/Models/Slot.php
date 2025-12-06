@@ -10,9 +10,12 @@ class Slot extends Model
         'slot_time',
         'booked_by',
         'booked_username',
+        'is_disabled',
     ];
     
     protected $casts = [
-        'slot_time' => 'datetime',
+        'slot_time'   => 'datetime',
+        'is_disabled' => 'boolean',
     ];
 }
+

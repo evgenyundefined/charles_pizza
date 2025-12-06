@@ -111,15 +111,57 @@ class TelegramBotController extends Controller
             return;
         }
         
-        if ($text === '/admin_slots') {
-            $adminId = (int)config('services.telegram.admin_chat_id');
-            if ($chatId === $adminId) {
-                $this->showAdminSlots($chatId);
-            } else {
+        if (str_starts_with($text, '/admin_slots')) {
+            $adminChatId = (int) config('services.telegram.admin_chat_id');
+            
+            // реагируем только в админ-чате (группе)
+            if ($chatId !== $adminChatId) {
                 $this->sendMessage($chatId, 'Эта команда только для владельца.');
+                return;
             }
+            
+            $parts = preg_split('/\s+/', $text);
+            $sub   = strtolower($parts[1] ?? '');     // подкоманда
+            $arg   = $parts[2] ?? null;              // аргумент, например время или шаг
+            
+            switch ($sub) {
+                case '':
+                    // просто /admin_slots — старое поведение
+                    $this->showAdminSlots($chatId);
+                    break;
+                
+                case 'available':
+                case 'availiable': // на всякий случай, если напишешь с опечаткой :)
+                    $this->showAdminAvailableSlots($chatId);
+                    break;
+                
+                case 'disable':
+                    $this->adminDisableSlot($chatId, $arg);
+                    break;
+                
+                case 'enable':
+                    $this->adminEnableSlot($chatId, $arg);
+                    break;
+                
+                case 'generate':
+                    $this->adminGenerateSlots($chatId, $arg);
+                    break;
+                
+                default:
+                    $this->sendMessage($chatId,
+                        "Команды /admin_slots:\n" .
+                        "• /admin_slots – занятые слоты 🍕\n" .
+                        "• /admin_slots available – свободные слоты ✅\n" .
+                        "• /admin_slots disable HH:MM – выключить слот 🚫\n" .
+                        "• /admin_slots enable HH:MM – включить слот обратно ✅\n" .
+                        "• /admin_slots generate N – сгенерировать слоты на сегодня с шагом N минут ⏱️"
+                    );
+                    break;
+            }
+            
             return;
         }
+        
         
         if ($text === 'Показать свободные слоты') {
             $this->showFreeSlots($chatId, $userId);
@@ -342,6 +384,7 @@ class TelegramBotController extends Controller
         $slots = Slot::query()
             ->where('slot_time', '>', now())
             ->whereNull('booked_by')
+            ->where('is_disabled', false)
             ->orderBy('slot_time')
             ->limit(6)
             ->get(['id', 'slot_time'])
@@ -515,10 +558,12 @@ class TelegramBotController extends Controller
             return Slot::query()
                 ->whereIn('id', $ids)
                 ->whereNull('booked_by')
+                ->where('is_disabled', false)
                 ->update([
                     'booked_by' => $userId,
                     'booked_username' => $usernameShort,
                 ]);
+            
         });
         
         if ($updated !== count($ids)) {
@@ -632,4 +677,134 @@ class TelegramBotController extends Controller
         $this->sendMessage($chatId, "📋 Занятые слоты:\n" . implode("\n", $chunks));
     }
     
+    protected function showAdminAvailableSlots($chatId): void
+    {
+        $slots = Slot::query()
+            ->whereDate('slot_time', now()->toDateString())
+            ->where('slot_time', '>', now())
+            ->whereNull('booked_by')
+            ->where('is_disabled', false)
+            ->orderBy('slot_time')
+            ->get(['slot_time']);
+        
+        if ($slots->isEmpty()) {
+            $this->sendMessage($chatId, 'На сегодня свободных слотов нет ✅');
+            return;
+        }
+        
+        $times = $slots->map(fn (Slot $s) => $s->slot_time->format('H:i'))->all();
+        
+        $this->sendMessage(
+            $chatId,
+            "Свободные слоты сегодня ⏰:\n" . implode(' ', $times)
+        );
+    }
+    protected function adminDisableSlot($chatId, ?string $timeStr): void
+    {
+        if (!$timeStr) {
+            $this->sendMessage($chatId, "Использование: /admin_slots disable HH:MM\nНапример: /admin_slots disable 15:30");
+            return;
+        }
+        
+        $timeStr = trim($timeStr);
+        
+        try {
+            $dt = Carbon::createFromFormat('H:i', $timeStr, config('app.timezone'));
+        } catch (\Throwable $e) {
+            $this->sendMessage($chatId, "Неверный формат времени ⏱️\nОжидаю HH:MM, например 15:30");
+            return;
+        }
+        
+        $slot = Slot::query()
+            ->whereDate('slot_time', now()->toDateString())
+            ->whereTime('slot_time', $dt->format('H:i:00'))
+            ->first();
+        
+        if (!$slot) {
+            $this->sendMessage($chatId, "Слот {$dt->format('H:i')} на сегодня не найден ❓");
+            return;
+        }
+        
+        if ($slot->booked_by !== null) {
+            $this->sendMessage($chatId, "Слот {$dt->format('H:i')} уже забронирован, отключать не буду ⚠️");
+            return;
+        }
+        
+        $slot->is_disabled = true;
+        $slot->save();
+        
+        $this->sendMessage($chatId, "Слот {$dt->format('H:i')} помечен как недоступный 🚫");
+    }
+    protected function adminEnableSlot($chatId, ?string $timeStr): void
+    {
+        if (!$timeStr) {
+            $this->sendMessage($chatId, "Использование: /admin_slots enable HH:MM\nНапример: /admin_slots enable 15:30");
+            return;
+        }
+        
+        $timeStr = trim($timeStr);
+        
+        try {
+            $dt = Carbon::createFromFormat('H:i', $timeStr, config('app.timezone'));
+        } catch (\Throwable $e) {
+            $this->sendMessage($chatId, "Неверный формат времени ⏱️\nОжидаю HH:MM, например 15:30");
+            return;
+        }
+        
+        $slot = Slot::query()
+            ->whereDate('slot_time', now()->toDateString())
+            ->whereTime('slot_time', $dt->format('H:i:00'))
+            ->first();
+        
+        if (!$slot) {
+            $this->sendMessage($chatId, "Слот {$dt->format('H:i')} на сегодня не найден ❓");
+            return;
+        }
+        
+        if ($slot->booked_by !== null) {
+            $this->sendMessage($chatId, "Слот {$dt->format('H:i')} уже забронирован, включать/выключать нет смысла ⚠️");
+            return;
+        }
+        
+        if (!$slot->is_disabled) {
+            $this->sendMessage($chatId, "Слот {$dt->format('H:i')} и так активен ✅");
+            return;
+        }
+        
+        $slot->is_disabled = false;
+        $slot->save();
+        
+        $this->sendMessage($chatId, "Слот {$dt->format('H:i')} снова доступен ✅");
+    }
+    protected function adminGenerateSlots($chatId, ?string $stepStr): void
+    {
+        if (!$stepStr || !ctype_digit($stepStr)) {
+            $this->sendMessage(
+                $chatId,
+                "Использование: /admin_slots generate N\n" .
+                "Где N — шаг в минутах, например 10 или 15."
+            );
+            return;
+        }
+        
+        $step = (int) $stepStr;
+        if ($step <= 0 || $step > 180) {
+            $this->sendMessage($chatId, "Странный шаг: {$step} минут 🤔\nПопробуйте что-то от 5 до 180.");
+            return;
+        }
+        
+        $date = now()->toDateString();
+        
+        Artisan::call('slots:generate', [
+            'date'    => $date,
+            '--step'  => $step,
+        ]);
+        
+        $output = trim(Artisan::output());
+        
+        $this->sendMessage(
+            $chatId,
+            "Генерация слотов на {$date} с шагом {$step} минут завершена ✅\n\n{$output}"
+        );
+    }
 }
