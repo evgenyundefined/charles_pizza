@@ -566,15 +566,42 @@ class TelegramBotController extends Controller
             return;
         }
         
-        $chunks = [];
+        $segments = [];
         
-        $rows->groupBy('booked_by')->each(function ($group, $userId) use (&$chunks) {
+        // сгруппируем сначала по пользователю
+        $rows->groupBy('booked_by')->each(function ($group, $userId) use (&$segments) {
+            /** @var \Illuminate\Support\Collection $group */
+            $group = $group->sortBy('slot_time')->values();
             $username = $group->first()->booked_username ?: $userId;
-            $times = $group->map(fn($s) => $s->slot_time->format('H:i'))->all();
-            $label = $username[0] === '@' ? $username : '@' . $username;
-            $chunks[] = '[' . implode(' ', $times) . ' ' . $label . ']';
+            
+            $current = [];
+            $prev = null;
+            
+            foreach ($group as $slot) {
+                $time = $slot->slot_time;
+                if ($prev && $time->diffInMinutes($prev) > 15) { // >15 мин — новый блок
+                    if ($current) {
+                        $segments[] = [$username, $current];
+                    }
+                    $current = [];
+                }
+                
+                $current[] = $time->format('H:i');
+                $prev = $time;
+            }
+            
+            if ($current) {
+                $segments[] = [$username, $current];
+            }
         });
+        
+        $chunks = [];
+        foreach ($segments as [$username, $times]) {
+            $label = str_starts_with($username, '@') ? $username : '@' . $username;
+            $chunks[] = '[' . implode(' ', $times) . ' ' . $label . ']';
+        }
         
         $this->sendMessage($chatId, "Занятые слоты:\n" . implode("\n", $chunks));
     }
+    
 }
