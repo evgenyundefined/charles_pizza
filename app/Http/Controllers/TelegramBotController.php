@@ -261,25 +261,34 @@ class TelegramBotController extends Controller
         
         if ($data === 'confirm1') {
             $state = $this->loadState($userId);
-            if (!$state || $state['step'] !== 'confirm_1') {
+            $dataState = $state['data'] ?? [];
+            
+            // проверяем только наличие данных, а не конкретный step
+            if (
+                !$state ||
+                empty($dataState['slots'] ?? []) ||
+                empty($dataState['chosen_idx'] ?? [])
+            ) {
                 $this->sendMessage($chatId, 'Сначала выберите слоты через «Показать свободные слоты».');
                 return;
             }
             
-            $this->saveState($userId, 'confirm_2', $state['data']);
+            // переводим состояние к confirm_2
+            $this->saveState($userId, 'confirm_2', $dataState);
             
             $text = "Вы уверены, что хотите подтвердить бронь? 🔒\n\n" .
                 "Если передумали — жмите «Отмена» ❌.";
             
             $keyboard = [
                 'inline_keyboard' => [
-                    ['text' => 'Отмена', 'callback_data' => 'cancel'],
-                    ['text' => 'Да, я хочу пиццу', 'callback_data' => 'confirm2'],
+                    [
+                        ['text' => 'Отмена ❌', 'callback_data' => 'cancel'],
+                        ['text' => 'Да, я хочу пиццу 🍕', 'callback_data' => 'confirm2'],
+                    ],
                 ],
             ];
             
-            if ($messageId) {
-                // заменяем текст того же сообщения
+            if ($messageId ?? null) {
                 $this->tg('editMessageText', [
                     'chat_id' => $chatId,
                     'message_id' => $messageId,
