@@ -200,7 +200,9 @@ class TelegramBotController extends Controller
                         "/admin_slots available – свободные слоты ✅\n" .
                         "/admin_slots disable HH:MM – выключить слот 🚫\n" .
                         "/admin_slots enable HH:MM – включить слот обратно ✅\n" .
-                        "/admin_slots generate N – сгенерировать слоты на сегодня с шагом N минут ⏱️"
+                        "/admin_slots generate N – сгенерировать слоты на сегодня с шагом N минут ⏱️ \n" .
+                        "/admin_techworks enable – включить бота \n".
+                        "/admin_techworks disable – выключить бота 🚫 \n"
                     );
                     break;
             }
