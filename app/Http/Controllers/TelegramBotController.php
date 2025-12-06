@@ -14,7 +14,7 @@ class TelegramBotController extends Controller
 {
     private const BTN_SHOW_SLOTS = 'Показать свободные слоты 🍕';
     private const BTN_MY_ORDERS  = 'Мои заказы 📦';
-    
+    private const BTN_ORDER_HISTORY = 'История заказов 📜';
     private const CACHE_MAINTENANCE_KEY = 'pizza_bot.maintenance';
     public function webhook(Request $request)
     {
@@ -168,8 +168,12 @@ class TelegramBotController extends Controller
             $this->sendMessage($chatId, $help);
             return;
         }
-        if (in_array($text, ['/my', self::BTN_MY_ORDERS], true)) {
-            $this->showMyBookings($chatId, $userId);
+        if ($text === self::BTN_MY_ORDERS) {
+            $this->showMyBookings($chatId, $userId, true);
+            return;
+        }
+        if ($text === self::BTN_ORDER_HISTORY) {
+            $this->showMyBookings($chatId, $userId, false);
             return;
         }
         
@@ -608,17 +612,19 @@ class TelegramBotController extends Controller
                 ],
                 [
                     ['text' => self::BTN_MY_ORDERS],
+                    ['text' => self::BTN_ORDER_HISTORY],
                 ],
             ],
-            'resize_keyboard' => true,
-            'one_time_keyboard' => false,
+            'resize_keyboard'    => true,
+            'one_time_keyboard'  => false,
         ];
         
         $this->sendMessage(
             $chatId,
             "Привет! Это пицца-бот 🍕🤖\n\n" .
-            "➡️ Нажмите «" . self::BTN_SHOW_SLOTS . "», чтобы забронировать время.\n" .
-            "📋 Нажмите «" . self::BTN_MY_ORDERS . "», чтобы посмотреть свои брони.",
+            "➡️ «" . self::BTN_SHOW_SLOTS . "» — выбрать время.\n" .
+            "📦 «" . self::BTN_MY_ORDERS . "» — ваши брони на сегодня.\n" .
+            "📜 «" . self::BTN_ORDER_HISTORY . "» — вся история заказов.",
             $keyboard
         );
     }
@@ -844,7 +850,9 @@ class TelegramBotController extends Controller
         );
         
         $text = 'Готово! 🎉 За вами слоты: ' . implode(', ', $times) . " 🍕" .
-            "\n\n🧾 Посмотреть свои брони: /my";
+            "\n\n📦 Брони на сегодня — кнопка «Мои заказы 📦»\n" .
+            "📜 История — кнопка «История заказов 📜».";
+        
         
         if ($messageId) {
             $this->tg('editMessageText', [
@@ -869,25 +877,66 @@ class TelegramBotController extends Controller
         
         $this->sendMessage($adminId, $adminText);
     }
-    protected function showMyBookings($chatId, int $userId): void
+    protected function showMyBookings($chatId, int $userId, bool $todayOnly = false): void
     {
-        $slots = Slot::query()
-            ->where('booked_by', $userId)
+        $query = Slot::query()
+            ->where('booked_by', $userId);
+        
+        if ($todayOnly) {
+            $query->whereDate('slot_time', now()->toDateString());
+        }
+        
+        $slots = $query
             ->orderBy('slot_time')
-            ->get(['slot_time']);
+            ->get(['slot_time', 'comment', 'is_completed']);
         
         if ($slots->isEmpty()) {
-            $this->sendMessage($chatId, 'У вас пока нет броней 😴');
+            $msg = $todayOnly
+                ? 'На сегодня у вас нет броней 😴'
+                : 'У вас пока нет броней 😴';
+            
+            $this->sendMessage($chatId, $msg);
             return;
         }
         
-        $lines = ['🧾 Ваши брони:'];
+        $lines = [
+            $todayOnly
+                ? '🧾 Ваши брони на сегодня:'
+                : '🧾 Ваши брони:',
+        ];
+        
+        $currentDate = null;
+        
         foreach ($slots as $slot) {
-            $lines[] = $slot->slot_time->format('d.m H:i');
+            /** @var \App\Models\Slot $slot */
+            $dateLabel = $slot->slot_time->format('d.m');
+            $timeLabel = $slot->slot_time->format('H:i');
+            
+            if (!$todayOnly && $dateLabel !== $currentDate) {
+                $currentDate = $dateLabel;
+                $lines[] = '';
+                $lines[] = '📅 ' . $dateLabel;
+            } elseif ($todayOnly && $currentDate === null) {
+                // один заголовок даты на сегодня
+                $currentDate = $dateLabel;
+                $lines[] = '📅 ' . $dateLabel;
+            }
+            
+            $status = $slot->is_completed
+                ? '✅ выполнен'
+                : '⏳ ожидает';
+            
+            $lines[] = "• {$timeLabel} — {$status}";
+            
+            if (!empty($slot->comment)) {
+                $lines[] = '   💬 ' . $slot->comment;
+            }
         }
         
         $this->sendMessage($chatId, implode("\n", $lines));
     }
+    
+    
     protected function showAdminSlots($chatId): void
     {
         [$text, $replyMarkup] = $this->buildAdminSlotsView();
