@@ -355,15 +355,46 @@ class TelegramBotController extends Controller
         
         if ($data === 'confirm2') {
             $state = $this->loadState($userId);
-            if (!$state || $state['step'] !== 'confirm_2') {
-                $this->sendMessage($chatId, 'Сначала выберите слоты.');
+            $dataState = $state['data'] ?? [];
+            
+            if (
+                !$state ||
+                empty($dataState['slots'] ?? []) ||
+                empty($dataState['chosen_idx'] ?? [])
+            ) {
+                $this->sendMessage($chatId, 'Сначала выберите слоты через «Показать свободные слоты».');
                 return;
             }
             
-            $this->confirmBooking($chatId, $userId, $username, $state['data'], $messageId);
-            $this->clearState($userId);
+            // запомним message_id, чтобы потом этим же сообщением показать "Готово!"
+            if (($messageId ?? null) !== null) {
+                $dataState['message_id'] = $messageId;
+            }
+            
+            // переводим пользователя в шаг "ожидание комментария"
+            $this->saveState($userId, 'comment', $dataState);
+            
+            $text = "Отлично! 🎉\n\n" .
+                "Теперь вы можете оставить комментарий к заказу 💬\n" .
+                "Например: как резать пиццу, без лука, поострее, телефон и т.п.\n\n" .
+                "Просто отправьте комментарий одним сообщением.\n" .
+                "Если комментарий не нужен — отправьте «-».";
+            
+            // убираем старые кнопки и заменяем текст того же сообщения
+            if (($messageId ?? null) !== null) {
+                $this->tg('editMessageText', [
+                    'chat_id'    => $chatId,
+                    'message_id' => $messageId,
+                    'text'       => $text,
+                    'parse_mode' => 'HTML',
+                ]);
+            } else {
+                $this->sendMessage($chatId, $text);
+            }
+            
             return;
         }
+        
     }
     
     /* ================== UI / БИЗНЕС-ЛОГИКА ================== */
@@ -441,6 +472,31 @@ class TelegramBotController extends Controller
     protected function handleSlotDigits($chatId, int $userId, string $username, string $digits): void
     {
         $state = $this->loadState($userId);
+        if ($state && ($state['step'] ?? null) === 'comment') {
+            $comment = trim($text);
+            
+            if ($comment === '') {
+                $this->sendMessage(
+                    $chatId,
+                    "Комментарий пустой 🤔\nНапишите что-нибудь или отправьте «-», если комментарий не нужен."
+                );
+                return;
+            }
+            
+            // "-" или "нет" считаем отсутствием комментария
+            $lower = mb_strtolower($comment);
+            if ($comment === '-' || $lower === 'нет') {
+                $comment = null;
+            }
+            
+            $data      = $state['data'] ?? [];
+            $messageId = $data['message_id'] ?? null;
+            
+            $this->confirmBooking($chatId, $userId, $username, $data, $messageId, $comment);
+            $this->clearState($userId);
+            
+            return;
+        }
         if (!$state || $state['step'] !== 'select_slots') {
             $this->sendMessage($chatId, 'Сначала нажмите «Показать свободные слоты».');
             return;
@@ -542,7 +598,14 @@ class TelegramBotController extends Controller
         return $rows;
     }
     
-    protected function confirmBooking($chatId, int $userId, string $username, array $data, ?int $messageId = null): void
+    protected function confirmBooking(
+        $chatId,
+        int $userId,
+        string $username,
+        array $data,
+        ?int $messageId = null,
+        ?string $comment = null
+    ): void
     {
         $slots = $data['slots'] ?? [];
         $idx   = $data['chosen_idx'] ?? [];
@@ -613,11 +676,14 @@ class TelegramBotController extends Controller
         $adminId = (int) config('services.telegram.admin_chat_id');
         $label = str_starts_with($usernameShort, '@') ? $usernameShort : '@' . $usernameShort;
         
-        $this->sendMessage(
-            $adminId,
-            '🍕 Новая бронь:' . PHP_EOL .
-            '[' . implode(' ', $times) . ' ' . $label . ']'
-        );
+        $adminText = '🍕 Новая бронь:' . PHP_EOL .
+            '[' . implode(' ', $times) . ' ' . $label . ']';
+        
+        if ($comment !== null && $comment !== '') {
+            $adminText .= PHP_EOL . '💬 Комментарий: ' . $comment;
+        }
+        
+        $this->sendMessage($adminId, $adminText);
     }
     
     protected function showMyBookings($chatId, int $userId): void
