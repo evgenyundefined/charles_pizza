@@ -265,7 +265,7 @@ class TelegramBotController extends Controller
         
         $this->sendMessage(
             $chatId,
-            "Я вас не понял.\nНажмите «Показать свободные слоты» или команду /my."
+            "Я вас не понял."
         );
     }
     
