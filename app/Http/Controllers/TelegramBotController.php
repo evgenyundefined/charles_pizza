@@ -303,8 +303,13 @@ class TelegramBotController extends Controller
         $data     = $callback['data'] ?? '';
         $userId   = $callback['from']['id'];
         $chatId   = $callback['message']['chat']['id'];
-        $cbId     = $callback['id'];
+        $username = $callback['from']['username'] ?? trim(
+            ($callback['from']['first_name'] ?? '') . ' ' . ($callback['from']['last_name'] ?? '')
+        );
+        $cbId      = $callback['id'];
         $messageId = $callback['message']['message_id'] ?? null;
+        
+        $this->answerCallback($cbId);
         
         $adminChatId = (int) config('services.telegram.admin_chat_id');
         
@@ -524,7 +529,7 @@ class TelegramBotController extends Controller
                 empty($dataState['slots'] ?? []) ||
                 empty($dataState['chosen_idx'] ?? [])
             ) {
-                $this->sendMessage($chatId, 'Сначала выберите слоты через «Показать свободные слоты».');
+                $this->sendMessage($chatId, 'Сначала выберите слоты через «Показать свободные слоты 🍕».');
                 return;
             }
             
@@ -533,16 +538,60 @@ class TelegramBotController extends Controller
                 $dataState['message_id'] = $messageId;
             }
             
-            // переводим пользователя в шаг "ожидание комментария"
-            $this->saveState($userId, 'comment', $dataState);
+            // новый шаг: выбор, хотим ли комментарий
+            $this->saveState($userId, 'comment_choice', $dataState);
             
             $text = "Отлично! 🎉\n\n" .
-                "Теперь вы можете оставить комментарий к заказу 💬\n" .
-                "Например: как резать пиццу, без лука, поострее, телефон и т.п.\n\n" .
-                "Просто отправьте комментарий одним сообщением.\n" .
-                "Если комментарий не нужен — отправьте «-».";
+                "Хотите добавить комментарий к заказу? 💬\n" .
+                "Например: без лука, поострее, номер телефона и т.п.";
             
-            // убираем старые кнопки и заменяем текст того же сообщения
+            $keyboard = [
+                'inline_keyboard' => [
+                    [
+                        ['text' => 'Хочу добавить комментарий 💬', 'callback_data' => 'comment_yes'],
+                    ],
+                    [
+                        ['text' => 'Нет, без комментария ✅', 'callback_data' => 'comment_no'],
+                    ],
+                ],
+            ];
+            
+            if (($messageId ?? null) !== null) {
+                $this->tg('editMessageText', [
+                    'chat_id'    => $chatId,
+                    'message_id' => $messageId,
+                    'text'       => $text,
+                    'parse_mode' => 'HTML',
+                    'reply_markup' => json_encode($keyboard, JSON_UNESCAPED_UNICODE),
+                ]);
+            } else {
+                $this->sendMessage($chatId, $text, $keyboard);
+            }
+            
+            return;
+        }
+        
+        if ($data === 'comment_yes') {
+            $state = $this->loadState($userId);
+            $dataState = $state['data'] ?? [];
+            
+            if (
+                !$state ||
+                ($state['step'] ?? null) !== 'comment_choice' ||
+                empty($dataState['slots'] ?? []) ||
+                empty($dataState['chosen_idx'] ?? [])
+            ) {
+                $this->sendMessage($chatId, 'Сначала выберите слоты через «Показать свободные слоты 🍕».');
+                return;
+            }
+            
+            // переводим в шаг "comment"
+            $this->saveState($userId, 'comment', $dataState);
+            
+            $text = "Окей! 💬\n\n" .
+                "Отправьте комментарий одним сообщением.\n" .
+                "Если передумали — можете отправить «-» или «нет», и комментарий не будет сохранён.";
+            
             if (($messageId ?? null) !== null) {
                 $this->tg('editMessageText', [
                     'chat_id'    => $chatId,
@@ -557,6 +606,35 @@ class TelegramBotController extends Controller
             return;
         }
         
+        if ($data === 'comment_no') {
+            $state = $this->loadState($userId);
+            $dataState = $state['data'] ?? [];
+            
+            if (
+                !$state ||
+                ($state['step'] ?? null) !== 'comment_choice' ||
+                empty($dataState['slots'] ?? []) ||
+                empty($dataState['chosen_idx'] ?? [])
+            ) {
+                $this->sendMessage($chatId, 'Сначала выберите слоты через «Показать свободные слоты 🍕».');
+                return;
+            }
+            
+            $messageIdFromState = $dataState['message_id'] ?? ($messageId ?? null);
+            
+            // бронируем БЕЗ комментария
+            $this->confirmBooking(
+                $chatId,
+                $userId,
+                $username,
+                $dataState,
+                $messageIdFromState,
+                null // комментария нет
+            );
+            
+            $this->clearState($userId);
+            return;
+        }
     }
     
     /* ================== UI / БИЗНЕС-ЛОГИКА ================== */
@@ -1048,7 +1126,7 @@ class TelegramBotController extends Controller
             } else {
                 // не выполнен — добавляем кнопку
                 $keyboard['inline_keyboard'][] = [[
-                    'text' => "Выполнен {$time} ✅",
+                    'text' => "Выполнен {$time} для {$username} ✅",
                     'callback_data' => 'done:' . $slot->id,
                 ]];
             }
