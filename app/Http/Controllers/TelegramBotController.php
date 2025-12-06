@@ -640,16 +640,16 @@ class TelegramBotController extends Controller
         
         $usernameShort = $username !== '' ? $username : (string) $userId;
         
-        $updated = \DB::transaction(function () use ($ids, $userId, $usernameShort) {
+        $updated = \DB::transaction(function () use ($ids, $userId, $usernameShort, $comment) {
             return Slot::query()
                 ->whereIn('id', $ids)
                 ->whereNull('booked_by')
                 ->where('is_disabled', false)
                 ->update([
-                    'booked_by' => $userId,
+                    'booked_by'       => $userId,
                     'booked_username' => $usernameShort,
+                    'comment'         => $comment,
                 ]);
-            
         });
         
         if ($updated !== count($ids)) {
@@ -686,11 +686,14 @@ class TelegramBotController extends Controller
         $adminId = (int) config('services.telegram.admin_chat_id');
         $label = str_starts_with($usernameShort, '@') ? $usernameShort : '@' . $usernameShort;
         
-        $this->sendMessage(
-            $adminId,
-            '🍕 Новая бронь:' . PHP_EOL .
-            '[' . implode(' ', $times) . ' ' . $label . ']'
-        );
+        $adminText = '🍕 Новая бронь:' . PHP_EOL .
+            '[' . implode(' ', $times) . ' ' . $label . ']';
+        
+        if ($comment !== null && $comment !== '') {
+            $adminText .= PHP_EOL . '💬 Комментарий: ' . $comment;
+        }
+        
+        $this->sendMessage($adminId, $adminText);
     }
     
     protected function showMyBookings($chatId, int $userId): void
@@ -718,50 +721,36 @@ class TelegramBotController extends Controller
         $rows = Slot::query()
             ->whereNotNull('booked_by')
             ->orderBy('slot_time')
-            ->get(['slot_time', 'booked_by', 'booked_username']);
+            ->get(['slot_time', 'booked_by', 'booked_username', 'comment']);
         
         if ($rows->isEmpty()) {
-            $this->sendMessage($chatId, '📋 Занятых слотов нет.');
+            $this->sendMessage($chatId, 'Занятых слотов нет.');
             return;
         }
         
-        $segments = [];
+        $lines = ["📋 Занятые слоты:"];
         
-        // сгруппируем сначала по пользователю
-        $rows->groupBy('booked_by')->each(function ($group, $userId) use (&$segments) {
-            /** @var \Illuminate\Support\Collection $group */
-            $group = $group->sortBy('slot_time')->values();
-            $username = $group->first()->booked_username ?: $userId;
+        foreach ($rows as $slot) {
+            /** @var \App\Models\Slot $slot */
+            $time = $slot->slot_time->format('H:i');
             
-            $current = [];
-            $prev = null;
-            
-            foreach ($group as $slot) {
-                $time = $slot->slot_time;
-                if ($prev && $time->diffInMinutes($prev) > 15) { // >15 мин — новый блок
-                    if ($current) {
-                        $segments[] = [$username, $current];
-                    }
-                    $current = [];
-                }
-                
-                $current[] = $time->format('H:i');
-                $prev = $time;
+            $username = $slot->booked_username ?: $slot->booked_by;
+            if (!str_starts_with((string) $username, '@')) {
+                $username = '@' . $username;
             }
             
-            if ($current) {
-                $segments[] = [$username, $current];
+            $line = "[{$time} {$username}]";
+            
+            if ($slot->comment) {
+                $line .= " 💬 {$slot->comment}";
             }
-        });
-        
-        $chunks = [];
-        foreach ($segments as [$username, $times]) {
-            $label = str_starts_with($username, '@') ? $username : '@' . $username;
-            $chunks[] = '[' . implode(' ', $times) . ' ' . $label . ']';
+            
+            $lines[] = $line;
         }
         
-        $this->sendMessage($chatId, "📋 Занятые слоты:\n" . implode("\n", $chunks));
+        $this->sendMessage($chatId, implode("\n", $lines));
     }
+    
     
     protected function showAdminAvailableSlots($chatId): void
     {

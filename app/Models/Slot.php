@@ -11,6 +11,7 @@ class Slot extends Model
         'booked_by',
         'booked_username',
         'is_disabled',
+        'comment',
     ];
     
     protected $casts = [
@@ -18,4 +19,5 @@ class Slot extends Model
         'is_disabled' => 'boolean',
     ];
 }
+
 
