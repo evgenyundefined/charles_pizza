@@ -12,12 +12,15 @@ class Slot extends Model
         'booked_username',
         'is_disabled',
         'comment',
+        'is_completed',          // <-- добавили
     ];
     
     protected $casts = [
-        'slot_time'   => 'datetime',
-        'is_disabled' => 'boolean',
+        'slot_time'     => 'datetime',
+        'is_disabled'   => 'boolean',
+        'is_completed'  => 'boolean',   // <-- добавили
     ];
 }
+
 
 

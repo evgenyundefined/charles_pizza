@@ -276,13 +276,11 @@ class TelegramBotController extends Controller
     
     protected function handleCallback(array $callback): void
     {
-        $data = $callback['data'] ?? '';
-        $userId = $callback['from']['id'];
-        $chatId = $callback['message']['chat']['id'];
-        $username = $callback['from']['username'] ?? trim(
-            ($callback['from']['first_name'] ?? '') . ' ' . ($callback['from']['last_name'] ?? '')
-        );
-        $cbId = $callback['id'];
+        $data     = $callback['data'] ?? '';
+        $userId   = $callback['from']['id'];
+        $chatId   = $callback['message']['chat']['id'];
+        $cbId     = $callback['id'];
+        $messageId = $callback['message']['message_id'] ?? null;
         
         $adminChatId = (int) config('services.telegram.admin_chat_id');
         
@@ -300,6 +298,45 @@ class TelegramBotController extends Controller
         }
         
         $this->answerCallback($cbId);
+        
+        // Отметить слот как выполненный: done:{slotId}
+        if (str_starts_with($data, 'done:')) {
+            $slotId = (int) substr($data, 5);
+            
+            $slot = Slot::query()->find($slotId);
+            if ($slot) {
+                $slot->is_completed = true;
+                $slot->save();
+            }
+            
+            // Перерисуем сообщение /admin_slots с учётом галочек
+            [$text, $replyMarkup] = $this->buildAdminSlotsView();
+            
+            if ($messageId) {
+                $params = [
+                    'chat_id'    => $chatId,
+                    'message_id' => $messageId,
+                    'text'       => $text,
+                    'parse_mode' => 'HTML',
+                ];
+                
+                if ($replyMarkup) {
+                    $params['reply_markup'] = json_encode($replyMarkup, JSON_UNESCAPED_UNICODE);
+                }
+                
+                $this->tg('editMessageText', $params);
+            } else {
+                // на всякий случай, если message_id нет
+                if ($replyMarkup) {
+                    $this->sendMessage($chatId, $text, $replyMarkup);
+                } else {
+                    $this->sendMessage($chatId, $text);
+                }
+            }
+            
+            return;
+        }
+        
         $messageId = $callback['message']['message_id'] ?? null;
         
         // выбор / снятие выбора слота по кнопке
@@ -804,40 +841,15 @@ class TelegramBotController extends Controller
         
         $this->sendMessage($chatId, implode("\n", $lines));
     }
-    
     protected function showAdminSlots($chatId): void
     {
-        $rows = Slot::query()
-            ->whereNotNull('booked_by')
-            ->orderBy('slot_time')
-            ->get(['slot_time', 'booked_by', 'booked_username', 'comment']);
+        [$text, $replyMarkup] = $this->buildAdminSlotsView();
         
-        if ($rows->isEmpty()) {
-            $this->sendMessage($chatId, 'Занятых слотов нет.');
-            return;
+        if ($replyMarkup) {
+            $this->sendMessage($chatId, $text, $replyMarkup);
+        } else {
+            $this->sendMessage($chatId, $text);
         }
-        
-        $lines = ["📋 Занятые слоты:"];
-        
-        foreach ($rows as $slot) {
-            /** @var \App\Models\Slot $slot */
-            $time = $slot->slot_time->format('H:i');
-            
-            $username = $slot->booked_username ?: $slot->booked_by;
-            if (!str_starts_with((string) $username, '@')) {
-                $username = '@' . $username;
-            }
-            
-            $line = "[{$time} {$username}]";
-            
-            if ($slot->comment) {
-                $line .= " 💬 {$slot->comment}";
-            }
-            
-            $lines[] = $line;
-        }
-        
-        $this->sendMessage($chatId, implode("\n", $lines));
     }
     
     
@@ -971,4 +983,60 @@ class TelegramBotController extends Controller
             "Генерация слотов на {$date} с шагом {$step} минут завершена ✅\n\n{$output}"
         );
     }
+    
+    /**
+     * Собирает текст и inline-клавиатуру для /admin_slots.
+     *
+     * @return array [string $text, ?array $replyMarkup]
+     */
+    protected function buildAdminSlotsView(): array
+    {
+        $rows = Slot::query()
+            ->whereNotNull('booked_by')
+            ->orderBy('slot_time')
+            ->get(['id', 'slot_time', 'booked_by', 'booked_username', 'comment', 'is_completed']);
+        
+        if ($rows->isEmpty()) {
+            return ['Занятых слотов нет.', null];
+        }
+        
+        $lines    = ["📋 Занятые слоты:"];
+        $keyboard = ['inline_keyboard' => []];
+        
+        foreach ($rows as $slot) {
+            /** @var \App\Models\Slot $slot */
+            $time = $slot->slot_time->format('H:i');
+            
+            $username = $slot->booked_username ?: $slot->booked_by;
+            if (!str_starts_with((string) $username, '@')) {
+                $username = '@' . $username;
+            }
+            
+            $line = "[{$time} {$username}]";
+            
+            if ($slot->comment) {
+                $line .= " 💬 {$slot->comment}";
+            }
+            
+            if ($slot->is_completed) {
+                // уже выполнен — просто галочка
+                $line .= " ✅";
+            } else {
+                // не выполнен — добавляем кнопку
+                $keyboard['inline_keyboard'][] = [[
+                    'text' => "Выполнен {$time} ✅",
+                    'callback_data' => 'done:' . $slot->id,
+                ]];
+            }
+            
+            $lines[] = $line;
+        }
+        
+        if (empty($keyboard['inline_keyboard'])) {
+            $keyboard = null;
+        }
+        
+        return [implode("\n", $lines), $keyboard];
+    }
+    
 }
