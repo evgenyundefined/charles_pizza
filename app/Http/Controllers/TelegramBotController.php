@@ -652,7 +652,6 @@ class TelegramBotController extends Controller
             return;
         }
         
-        // сохраняем слоты и пока пустой выбор
         $this->saveState($userId, 'select_slots', [
             'slots' => $slots,
             'chosen_idx' => [],
@@ -660,9 +659,8 @@ class TelegramBotController extends Controller
         
         $lines = ['Свободные слоты на сегодня ⏰:'];
         foreach ($slots as $i => $slot) {
-            $num  = $i + 1;
             $time = Carbon::parse($slot['slot_time'])->format('H:i');
-            $lines[] = "{$num}) {$time}";
+            $lines[] = "{$time}";
         }
         $lines[] = '';
         $lines[] = '👇 Нажмите на кнопки со слотами, которые хотите занять, затем на «Готово».';
