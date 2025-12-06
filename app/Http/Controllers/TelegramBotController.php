@@ -11,6 +11,8 @@ use Carbon\Carbon;
 
 class TelegramBotController extends Controller
 {
+    private const BTN_SHOW_SLOTS = 'Показать свободные слоты 🍕';
+    private const BTN_MY_ORDERS  = 'Мои заказы 📦';
     public function webhook(Request $request)
     {
         $update = $request->all();
@@ -106,8 +108,13 @@ class TelegramBotController extends Controller
             return;
         }
         
-        if ($text === '/my') {
+        if (in_array($text, ['/my', self::BTN_MY_ORDERS], true)) {
             $this->showMyBookings($chatId, $userId);
+            return;
+        }
+        
+        if (in_array($text, ['Показать свободные слоты', self::BTN_SHOW_SLOTS], true)) {
+            $this->showFreeSlots($chatId, $userId);
             return;
         }
         
@@ -364,17 +371,22 @@ class TelegramBotController extends Controller
     {
         $keyboard = [
             'keyboard' => [
-                [['text' => 'Показать свободные слоты']],
-                [['text' => '/my']],
+                [
+                    ['text' => self::BTN_SHOW_SLOTS],
+                ],
+                [
+                    ['text' => self::BTN_MY_ORDERS],
+                ],
             ],
             'resize_keyboard' => true,
+            'one_time_keyboard' => false,
         ];
         
         $this->sendMessage(
             $chatId,
             "Привет! Это пицца-бот 🍕🤖\n\n" .
-            "➡️ Нажмите «Показать свободные слоты», чтобы забронировать время.\n" .
-            "📋 Команда /my — посмотреть ваши брони.",
+            "➡️ Нажмите «" . self::BTN_SHOW_SLOTS . "», чтобы забронировать время.\n" .
+            "📋 Нажмите «" . self::BTN_MY_ORDERS . "», чтобы посмотреть свои брони.",
             $keyboard
         );
     }
