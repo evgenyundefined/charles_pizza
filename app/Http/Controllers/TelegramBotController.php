@@ -1126,7 +1126,7 @@ class TelegramBotController extends Controller
             } else {
                 // не выполнен — добавляем кнопку
                 $keyboard['inline_keyboard'][] = [[
-                    'text' => "Пометить выполненым заказ {$time} для {$username} ✅",
+                    'text' => "Выполнен {$time} {$username} ✅",
                     'callback_data' => 'done:' . $slot->id,
                 ]];
             }
