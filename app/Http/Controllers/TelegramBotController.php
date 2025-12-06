@@ -102,7 +102,32 @@ class TelegramBotController extends Controller
             ($message['from']['first_name'] ?? '') . ' ' . ($message['from']['last_name'] ?? '')
         );
         $text = trim($message['text'] ?? '');
+        $state = $this->loadState($userId);
         
+        if ($state && ($state['step'] ?? null) === 'comment') {
+            $comment = trim($text);
+            
+            if ($comment === '') {
+                $this->sendMessage(
+                    $chatId,
+                    "Комментарий пустой 🤔\nНапишите что-нибудь или отправьте «-», если комментарий не нужен."
+                );
+                return;
+            }
+            
+            $lower = mb_strtolower($comment);
+            if ($comment === '-' || $lower === 'нет') {
+                $comment = null;
+            }
+            
+            $data      = $state['data'] ?? [];
+            $messageId = $data['message_id'] ?? null;
+            
+            $this->confirmBooking($chatId, $userId, $username, $data, $messageId, $comment);
+            $this->clearState($userId);
+            
+            return;
+        }
         if ($text === '/start') {
             $this->clearState($userId);
             $this->showMainMenu($chatId);
@@ -469,95 +494,87 @@ class TelegramBotController extends Controller
     }
     
     
-    protected function handleSlotDigits($chatId, int $userId, string $username, string $digits): void
+    protected function handleSlotDigits(int $chatId, int $userId, string $text): void
     {
+        // оставляем только цифры
+        $digits = preg_replace('/\D+/', '', $text);
+        if ($digits === '') {
+            $this->sendMessage(
+                $chatId,
+                "Используйте только номера слотов, например: 1, 12, 123."
+            );
+            return;
+        }
+        
         $state = $this->loadState($userId);
-        if ($state && ($state['step'] ?? null) === 'comment') {
-            $comment = trim($text);
-            
-            if ($comment === '') {
+        if (!$state || empty($state['data']['slots'] ?? [])) {
+            $this->sendMessage(
+                $chatId,
+                "Сначала нажмите «Показать свободные слоты 🍕»."
+            );
+            return;
+        }
+        
+        $slots = $state['data']['slots'];
+        $idx   = [];
+        
+        // разбираем строку на отдельные цифры
+        foreach (preg_split('//u', $digits, -1, PREG_SPLIT_NO_EMPTY) as $ch) {
+            $n = (int) $ch;
+            if ($n < 1 || $n > count($slots)) {
                 $this->sendMessage(
                     $chatId,
-                    "Комментарий пустой 🤔\nНапишите что-нибудь или отправьте «-», если комментарий не нужен."
+                    "Номер слота {$n} вне диапазона. Попробуйте ещё раз."
                 );
                 return;
             }
-            
-            // "-" или "нет" считаем отсутствием комментария
-            $lower = mb_strtolower($comment);
-            if ($comment === '-' || $lower === 'нет') {
-                $comment = null;
+            if (!in_array($n, $idx, true)) {
+                $idx[] = $n;
             }
-            
-            $data      = $state['data'] ?? [];
-            $messageId = $data['message_id'] ?? null;
-            
-            $this->confirmBooking($chatId, $userId, $username, $data, $messageId, $comment);
-            $this->clearState($userId);
-            
-            return;
-        }
-        if (!$state || $state['step'] !== 'select_slots') {
-            $this->sendMessage($chatId, 'Сначала нажмите «Показать свободные слоты».');
-            return;
         }
         
-        $slots = $state['data']['slots'] ?? [];
-        if (empty($slots)) {
-            $this->sendMessage($chatId, 'Свободные слоты устарели. Нажмите «Показать свободные слоты» ещё раз.');
-            return;
-        }
-        
-        $idx = [];
-        foreach (mb_str_split($digits) as $ch) {
-            $n = (int)$ch;
-            if ($n < 1 || $n > count($slots)) {
-                $this->sendMessage($chatId, "Неверный номер слота: {$n}");
-                return;
-            }
-            $idx[$n] = true;
-        }
-        $idx = array_keys($idx);
         sort($idx);
         
-        // проверяем, что номера подряд
+        // проверяем, что слоты идут подряд
         for ($i = 1; $i < count($idx); $i++) {
             if ($idx[$i] !== $idx[$i - 1] + 1) {
                 $this->sendMessage(
                     $chatId,
-                    "⚠️ Можно бронировать только подряд идущие слоты.\n" .
-                    "Пожалуйста, выберите слоты снова."
+                    "Можно бронировать только подряд идущие слоты.\n" .
+                    "Попробуйте ещё раз."
                 );
                 return;
             }
         }
         
+        // сохраняем выбранные индексы в state
+        $state['data']['chosen_idx'] = $idx;
+        $this->saveState($userId, 'confirm_1', $state['data']);
+        
+        // строим список времени выбранных слотов
         $chosen = [];
         foreach ($idx as $n) {
             $chosen[] = $slots[$n - 1];
         }
         
-        $state['data']['chosen_idx'] = $idx;
-        $this->saveState($userId, 'confirm_1', $state['data']);
-        
         $times = array_map(
-            fn($s) => (new \Carbon\Carbon($s['slot_time']))->format('H:i'),
+            fn($s) => \Carbon\Carbon::parse($s['slot_time'])->format('H:i'),
             $chosen
         );
         
-        $text = "Вы выбрали слоты: " . implode(', ', $times) . "\n\nПодтверждаете бронь?";
-        
+        $outText = "Вы выбрали слоты ⏰: " . implode(', ', $times) . "\n\nПодтверждаете бронь? ✅";
         $keyboard = [
             'inline_keyboard' => [
                 [
-                    ['text' => 'Отмена', 'callback_data' => 'cancel'],
-                    ['text' => 'Подтверждаю бронь', 'callback_data' => 'confirm1'],
+                    ['text' => 'Отмена ❌', 'callback_data' => 'cancel'],
+                    ['text' => 'Подтверждаю бронь ✅', 'callback_data' => 'confirm1'],
                 ],
             ],
         ];
         
-        $this->sendMessage($chatId, $text, $keyboard);
+        $this->sendMessage($chatId, $outText, $keyboard);
     }
+    
     /**
      * Строим inline-клавиатуру для выбора слотов.
      *
@@ -598,14 +615,7 @@ class TelegramBotController extends Controller
         return $rows;
     }
     
-    protected function confirmBooking(
-        $chatId,
-        int $userId,
-        string $username,
-        array $data,
-        ?int $messageId = null,
-        ?string $comment = null
-    ): void
+    protected function confirmBooking($chatId, int $userId, string $username, array $data, ?int $messageId = null): void
     {
         $slots = $data['slots'] ?? [];
         $idx   = $data['chosen_idx'] ?? [];
@@ -676,14 +686,11 @@ class TelegramBotController extends Controller
         $adminId = (int) config('services.telegram.admin_chat_id');
         $label = str_starts_with($usernameShort, '@') ? $usernameShort : '@' . $usernameShort;
         
-        $adminText = '🍕 Новая бронь:' . PHP_EOL .
-            '[' . implode(' ', $times) . ' ' . $label . ']';
-        
-        if ($comment !== null && $comment !== '') {
-            $adminText .= PHP_EOL . '💬 Комментарий: ' . $comment;
-        }
-        
-        $this->sendMessage($adminId, $adminText);
+        $this->sendMessage(
+            $adminId,
+            '🍕 Новая бронь:' . PHP_EOL .
+            '[' . implode(' ', $times) . ' ' . $label . ']'
+        );
     }
     
     protected function showMyBookings($chatId, int $userId): void
