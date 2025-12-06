@@ -642,9 +642,9 @@ class TelegramBotController extends Controller
     protected function showMainMenu($chatId): void
     {
         $text = "Привет! Это пицца-бот 🍕🤖\n\n" .
-            "   ➡️ «" . self::BTN_SHOW_SLOTS . "» — выбрать время.\n" .
-            "   📦 «" . self::BTN_MY_ORDERS . "» — ваши брони на сегодня.\n" .
-            "   📜 «" . self::BTN_ORDER_HISTORY . "» — вся история заказов.";
+            "   ➡️ " . self::BTN_SHOW_SLOTS . " — выбрать время.\n" .
+            "   📦 " . self::BTN_MY_ORDERS . " — ваши брони на сегодня.\n" .
+            "   📜 " . self::BTN_ORDER_HISTORY . " — вся история заказов.";
         
         $inlineKeyboard = [
             'inline_keyboard' => [
@@ -674,11 +674,11 @@ class TelegramBotController extends Controller
             'one_time_keyboard' => false,
         ];
         
-        $this->sendMessage(
+        /*$this->sendMessage(
             $chatId,
             "Меню на клавиатуре снизу 👇",
             $replyKeyboard
-        );
+        );*/
     }
     protected function showFreeSlots($chatId, int $userId): void
     {
