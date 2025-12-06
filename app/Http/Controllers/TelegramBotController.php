@@ -665,6 +665,14 @@ class TelegramBotController extends Controller
             $this->clearState($userId);
             return;
         }
+        if ($data === 'my_today') {
+            $this->showMyBookings($chatId, $userId, true);
+            return;
+        }
+        if ($data === 'my_history') {
+            $this->showMyBookings($chatId, $userId, false);
+            return;
+        }
     }
     
     /* ================== UI / БИЗНЕС-ЛОГИКА ================== */
@@ -914,19 +922,33 @@ class TelegramBotController extends Controller
         );
         
         $text = 'Готово! 🎉 За вами слоты: ' . implode(', ', $times) . " 🍕" .
-            "\n\n📦 Брони на сегодня — кнопка «Мои заказы»\n" .
-            "📜 История — кнопка «История заказов».";
+            "\n\n👇 Быстрый доступ:\n" .
+            "📦 Мои заказы — на сегодня\n" .
+            "📜 История заказов — все ваши брони.";
         
+        $inlineKeyboard = [
+            'inline_keyboard' => [
+                [
+                    ['text' => 'Мои заказы 📦',      'callback_data' => 'my_today'],
+                ],
+                [
+                    ['text' => 'История заказов 📜', 'callback_data' => 'my_history'],
+                ],
+            ],
+        ];
         
         if ($messageId) {
-            $this->tg('editMessageText', [
+            $params = [
                 'chat_id'    => $chatId,
                 'message_id' => $messageId,
                 'text'       => $text,
                 'parse_mode' => 'HTML',
-            ]);
+                'reply_markup' => json_encode($inlineKeyboard, JSON_UNESCAPED_UNICODE),
+            ];
+            
+            $this->tg('editMessageText', $params);
         } else {
-            $this->sendMessage($chatId, $text);
+            $this->sendMessage($chatId, $text, $inlineKeyboard);
         }
         
         
