@@ -150,11 +150,11 @@ class TelegramBotController extends Controller
                 default:
                     $this->sendMessage($chatId,
                         "Команды /admin_slots:\n" .
-                        "• /admin_slots – занятые слоты 🍕\n" .
-                        "• /admin_slots available – свободные слоты ✅\n" .
-                        "• /admin_slots disable HH:MM – выключить слот 🚫\n" .
-                        "• /admin_slots enable HH:MM – включить слот обратно ✅\n" .
-                        "• /admin_slots generate N – сгенерировать слоты на сегодня с шагом N минут ⏱️"
+                        "/admin_slots – занятые слоты 🍕\n" .
+                        "/admin_slots available – свободные слоты ✅\n" .
+                        "/admin_slots disable HH:MM – выключить слот 🚫\n" .
+                        "/admin_slots enable HH:MM – включить слот обратно ✅\n" .
+                        "/admin_slots generate N – сгенерировать слоты на сегодня с шагом N минут ⏱️"
                     );
                     break;
             }
