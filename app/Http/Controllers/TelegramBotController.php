@@ -641,7 +641,26 @@ class TelegramBotController extends Controller
     
     protected function showMainMenu($chatId): void
     {
-        $keyboard = [
+        $text = "Привет! Это пицца-бот 🍕🤖\n\n" .
+            "   ➡️ «" . self::BTN_SHOW_SLOTS . "» — выбрать время.\n" .
+            "   📦 «" . self::BTN_MY_ORDERS . "» — ваши брони на сегодня.\n" .
+            "   📜 «" . self::BTN_ORDER_HISTORY . "» — вся история заказов.";
+        
+        $inlineKeyboard = [
+            'inline_keyboard' => [
+                [
+                    ['text' => self::BTN_SHOW_SLOTS,    'callback_data' => 'menu_show_slots'],
+                ],
+                [
+                    ['text' => self::BTN_MY_ORDERS,     'callback_data' => 'my_today'],
+                    ['text' => self::BTN_ORDER_HISTORY, 'callback_data' => 'my_history'],
+                ],
+            ],
+        ];
+        
+        $this->sendMessage($chatId, $text, $inlineKeyboard);
+        
+        $replyKeyboard = [
             'keyboard' => [
                 [
                     ['text' => self::BTN_SHOW_SLOTS],
@@ -651,17 +670,14 @@ class TelegramBotController extends Controller
                     ['text' => self::BTN_ORDER_HISTORY],
                 ],
             ],
-            'resize_keyboard'    => true,
-            'one_time_keyboard'  => false,
+            'resize_keyboard'   => true,
+            'one_time_keyboard' => false,
         ];
         
         $this->sendMessage(
             $chatId,
-            "Привет! Это пицца-бот 🍕🤖\n\n" .
-            "➡️ «" . self::BTN_SHOW_SLOTS . "» — выбрать время.\n" .
-            "📦 «" . self::BTN_MY_ORDERS . "» — ваши брони на сегодня.\n" .
-            "📜 «" . self::BTN_ORDER_HISTORY . "» — вся история заказов.",
-            $keyboard
+            "Меню на клавиатуре снизу 👇",
+            $replyKeyboard
         );
     }
     protected function showFreeSlots($chatId, int $userId): void
