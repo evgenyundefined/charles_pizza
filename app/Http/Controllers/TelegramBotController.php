@@ -615,8 +615,14 @@ class TelegramBotController extends Controller
         return $rows;
     }
     
-    protected function confirmBooking($chatId, int $userId, string $username, array $data, ?int $messageId = null): void
-    {
+    protected function confirmBooking(
+        $chatId,
+        int $userId,
+        string $username,
+        array $data,
+        ?int $messageId = null,
+        ?string $comment = null   // <-- новый параметр с дефолтом
+    ): void {
         $slots = $data['slots'] ?? [];
         $idx   = $data['chosen_idx'] ?? [];
         
@@ -627,10 +633,15 @@ class TelegramBotController extends Controller
         
         $chosen = [];
         $ids    = [];
+        
         foreach ($idx as $n) {
-            $slot = $slots[$n - 1];
-            $chosen[] = $slot;
-            $ids[] = $slot['id'];
+            if (!isset($slots[$n - 1])) {
+                continue;
+            }
+            
+            $slot      = $slots[$n - 1];
+            $chosen[]  = $slot;
+            $ids[]     = $slot['id'];
         }
         
         if (empty($ids)) {
@@ -640,6 +651,7 @@ class TelegramBotController extends Controller
         
         $usernameShort = $username !== '' ? $username : (string) $userId;
         
+        // ВАЖНО: передаём $comment в use(), иначе его не видно внутри транзакции
         $updated = \DB::transaction(function () use ($ids, $userId, $usernameShort, $comment) {
             return Slot::query()
                 ->whereIn('id', $ids)
@@ -648,7 +660,7 @@ class TelegramBotController extends Controller
                 ->update([
                     'booked_by'       => $userId,
                     'booked_username' => $usernameShort,
-                    'comment'         => $comment,
+                    'comment'         => $comment,   // сохраняем комментарий
                 ]);
         });
         
@@ -656,35 +668,35 @@ class TelegramBotController extends Controller
             $this->sendMessage(
                 $chatId,
                 "К сожалению, один или несколько выбранных слотов уже заняты.\n" .
-                "Попробуйте ещё раз: «Показать свободные слоты»."
+                "Попробуйте ещё раз: «Показать свободные слоты 🍕»."
             );
             return;
         }
         
+        // Формируем список времени для пользователя и админа
         $times = array_map(
-            fn($s) => \Carbon\Carbon::parse($s['slot_time'])->format('H:i'),
+            fn ($s) => \Carbon\Carbon::parse($s['slot_time'])->format('H:i'),
             $chosen
         );
         
         $text = 'Готово! 🎉 За вами слоты: ' . implode(', ', $times) . " 🍕" .
             "\n\n🧾 Посмотреть свои брони: /my";
         
-        
+        // Редактируем уже существующее сообщение, если знаем message_id
         if ($messageId) {
-            // финальный текст вместо кнопок
             $this->tg('editMessageText', [
-                'chat_id' => $chatId,
+                'chat_id'    => $chatId,
                 'message_id' => $messageId,
-                'text' => $text,
+                'text'       => $text,
                 'parse_mode' => 'HTML',
             ]);
         } else {
             $this->sendMessage($chatId, $text);
         }
         
-        // уведомление в админ-группу
+        // Уведомление в админ-чат
         $adminId = (int) config('services.telegram.admin_chat_id');
-        $label = str_starts_with($usernameShort, '@') ? $usernameShort : '@' . $usernameShort;
+        $label   = str_starts_with($usernameShort, '@') ? $usernameShort : '@' . $usernameShort;
         
         $adminText = '🍕 Новая бронь:' . PHP_EOL .
             '[' . implode(' ', $times) . ' ' . $label . ']';
@@ -695,6 +707,7 @@ class TelegramBotController extends Controller
         
         $this->sendMessage($adminId, $adminText);
     }
+    
     
     protected function showMyBookings($chatId, int $userId): void
     {
