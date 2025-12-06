@@ -284,10 +284,10 @@ class TelegramBotController extends Controller
     
     protected function handleCallback(array $callback): void
     {
-        $data     = $callback['data'] ?? '';
-        $userId   = $callback['from']['id'];
-        $chatId   = $callback['message']['chat']['id'];
-        $username = $callback['from']['username'] ?? trim(
+        $data      = $callback['data'] ?? '';
+        $userId    = $callback['from']['id'];
+        $chatId    = $callback['message']['chat']['id'];
+        $username  = $callback['from']['username'] ?? trim(
             ($callback['from']['first_name'] ?? '') . ' ' . ($callback['from']['last_name'] ?? '')
         );
         $cbId      = $callback['id'];
@@ -373,7 +373,6 @@ class TelegramBotController extends Controller
             $state['data']['chosen_idx'] = $chosen;
             $this->saveState($userId, 'select_slots', $state['data']);
             
-            // обновляем клавиатуру в том же сообщении
             if ($messageId) {
                 $keyboard = [
                     'inline_keyboard' => $this->buildSlotsKeyboard($slots, $chosen),
@@ -404,7 +403,6 @@ class TelegramBotController extends Controller
             
             sort($idx);
             
-            // проверяем, что номера подряд
             for ($i = 1; $i < count($idx); $i++) {
                 if ($idx[$i] !== $idx[$i - 1] + 1) {
                     $this->sendMessage(
@@ -446,6 +444,74 @@ class TelegramBotController extends Controller
             $this->clearState($userId);
             $this->sendMessage($chatId, 'Бронь отменена ❌');
             $this->showMainMenu($chatId);
+            return;
+        }
+        if (str_starts_with($data, 'cancel_slot:')) {
+            $slotId = (int) substr($data, strlen('cancel_slot:'));
+            
+            $slot = Slot::query()->find($slotId);
+            
+            if (!$slot || $slot->booked_by !== $userId) {
+                $this->sendMessage($chatId, 'Не удалось найти вашу бронь для отмены.');
+                return;
+            }
+            
+            $now       = now();
+            $threshold = $now->copy()->subMinutes(10);
+            
+            if ($slot->is_completed
+                || !$slot->booked_at
+                || $slot->booked_at->lte($threshold)
+                || $slot->slot_time->lte($now)
+            ) {
+                $this->sendMessage($chatId, 'Эту бронь уже нельзя отменить ⏰');
+                return;
+            }
+            
+            $timeLabel      = $slot->slot_time->format('H:i');
+            $usernameShort  = $slot->booked_username ?: $slot->booked_by;
+            
+            $slot->update([
+                'booked_by'       => null,
+                'booked_username' => null,
+                'comment'         => null,
+                'is_completed'    => false,
+                'booked_at'       => null,
+            ]);
+            
+            
+            $label   = is_string($usernameShort) && str_starts_with($usernameShort, '@')
+                ? $usernameShort
+                : '@' . $usernameShort;
+            
+            $this->sendMessage(
+                $adminChatId,
+                "🚫 Отмена брони:\n[{$timeLabel} {$label}]"
+            );
+            
+            [$text, $replyMarkup] = $this->buildMyBookingsView($userId, true);
+            
+            if ($messageId ?? null) {
+                $params = [
+                    'chat_id'    => $chatId,
+                    'message_id' => $messageId,
+                    'text'       => $text,
+                    'parse_mode' => 'HTML',
+                ];
+                if ($replyMarkup) {
+                    $params['reply_markup'] = json_encode($replyMarkup, JSON_UNESCAPED_UNICODE);
+                }
+                $this->tg('editMessageText', $params);
+            } else {
+                if ($replyMarkup) {
+                    $this->sendMessage($chatId, $text, $replyMarkup);
+                } else {
+                    $this->sendMessage($chatId, $text);
+                }
+            }
+            
+            $this->sendMessage($chatId, "Бронь на {$timeLabel} отменена ❌");
+            
             return;
         }
         if ($data === 'confirm1') {
@@ -628,7 +694,6 @@ class TelegramBotController extends Controller
             $keyboard
         );
     }
-    
     protected function showFreeSlots($chatId, int $userId): void
     {
         $slots = Slot::query()
@@ -829,7 +894,8 @@ class TelegramBotController extends Controller
                 ->update([
                     'booked_by'       => $userId,
                     'booked_username' => $usernameShort,
-                    'comment'         => $comment,   // сохраняем комментарий
+                    'comment'         => $comment,
+                    'booked_at'       => now(),
                 ]);
         });
         
@@ -875,7 +941,12 @@ class TelegramBotController extends Controller
         
         $this->sendMessage($adminId, $adminText);
     }
-    protected function showMyBookings($chatId, int $userId, bool $todayOnly = false): void
+    /**
+     * Собирает текст и inline-клавиатуру для "моих заказов".
+     *
+     * @return array [string $text, ?array $replyMarkup]
+     */
+    protected function buildMyBookingsView(int $userId, bool $todayOnly = false): array
     {
         $query = Slot::query()
             ->where('booked_by', $userId);
@@ -886,15 +957,14 @@ class TelegramBotController extends Controller
         
         $slots = $query
             ->orderBy('slot_time')
-            ->get(['slot_time', 'comment', 'is_completed']);
+            ->get(['id', 'slot_time', 'comment', 'is_completed', 'booked_at']);
         
         if ($slots->isEmpty()) {
             $msg = $todayOnly
                 ? 'На сегодня у вас нет броней 😴'
                 : 'У вас пока нет броней 😴';
             
-            $this->sendMessage($chatId, $msg);
-            return;
+            return [$msg, null];
         }
         
         $lines = [
@@ -904,6 +974,11 @@ class TelegramBotController extends Controller
         ];
         
         $currentDate = null;
+        $now        = now();
+        $threshold  = $now->copy()->subMinutes(10);
+        
+        // Клавиатура только для "Мои заказы" (сегодня)
+        $keyboard = $todayOnly ? ['inline_keyboard' => []] : null;
         
         foreach ($slots as $slot) {
             /** @var \App\Models\Slot $slot */
@@ -915,7 +990,6 @@ class TelegramBotController extends Controller
                 $lines[] = '';
                 $lines[] = '📅 ' . $dateLabel;
             } elseif ($todayOnly && $currentDate === null) {
-                // один заголовок даты на сегодня
                 $currentDate = $dateLabel;
                 $lines[] = '📅 ' . $dateLabel;
             }
@@ -929,12 +1003,37 @@ class TelegramBotController extends Controller
             if (!empty($slot->comment)) {
                 $lines[] = '   💬 ' . $slot->comment;
             }
+            
+            // можно ли отменить?
+            if ($todayOnly
+                && !$slot->is_completed
+                && $slot->booked_at
+                && $slot->booked_at->gt($threshold)   // прошло < 10 минут
+                && $slot->slot_time->gt($now)         // и слот ещё не в прошлом
+            ) {
+                $keyboard['inline_keyboard'][] = [[
+                    'text' => "Отменить {$timeLabel} ❌",
+                    'callback_data' => 'cancel_slot:' . $slot->id,
+                ]];
+            }
         }
         
-        $this->sendMessage($chatId, implode("\n", $lines));
+        if ($keyboard && empty($keyboard['inline_keyboard'])) {
+            $keyboard = null;
+        }
+        
+        return [implode("\n", $lines), $keyboard];
     }
-    
-    
+    protected function showMyBookings($chatId, int $userId, bool $todayOnly = false): void
+    {
+        [$text, $replyMarkup] = $this->buildMyBookingsView($userId, $todayOnly);
+        
+        if ($replyMarkup) {
+            $this->sendMessage($chatId, $text, $replyMarkup);
+        } else {
+            $this->sendMessage($chatId, $text);
+        }
+    }
     protected function showAdminSlots($chatId): void
     {
         [$text, $replyMarkup] = $this->buildAdminSlotsView();
