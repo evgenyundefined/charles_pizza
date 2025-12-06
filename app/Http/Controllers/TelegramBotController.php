@@ -36,6 +36,13 @@ class TelegramBotController extends Controller
     
     protected function sendMessage($chatId, string $text, ?array $replyMarkup = null): void
     {
+        $token = config('services.telegram.bot_token');
+        \Log::info('TG SEND', [
+            'token' => $token,
+            'chat_id' => $chatId,
+            'text' => $text,
+        ]);
+        
         $params = [
             'chat_id' => $chatId,
             'text' => $text,
