@@ -212,7 +212,7 @@ class TelegramBotController extends Controller
             $idx   = $state['data']['chosen_idx'] ?? [];
             
             if (empty($idx)) {
-                $this->sendMessage($chatId, 'Вы не выбрали ни одного слота.');
+                $this->sendMessage($chatId, 'Вы не выбрали ни одного слота 😅');
                 return;
             }
             
@@ -224,7 +224,7 @@ class TelegramBotController extends Controller
                     $this->sendMessage(
                         $chatId,
                         "Можно бронировать только подряд идущие слоты.\n" .
-                        "Выберите слоты снова."
+                        "Выберите слоты снова ⏰."
                     );
                     return;
                 }
@@ -243,12 +243,12 @@ class TelegramBotController extends Controller
                 $chosen
             );
             
-            $text = "Вы выбрали слоты: " . implode(', ', $times) . "\n\nПодтверждаете бронь?";
+            $text = "Вы выбрали слоты ⏰: " . implode(', ', $times) . "\n\nПодтверждаете бронь? ✅";
             $keyboard = [
                 'inline_keyboard' => [
                     [
-                        ['text' => 'Отмена', 'callback_data' => 'cancel'],
-                        ['text' => 'Подтверждаю бронь', 'callback_data' => 'confirm1'],
+                        ['text' => 'Отмена ❌', 'callback_data' => 'cancel'],
+                        ['text' => 'Подтверждаю бронь 🔒', 'callback_data' => 'confirm1'],
                     ],
                 ],
             ];
@@ -259,7 +259,7 @@ class TelegramBotController extends Controller
         
         if ($data === 'cancel') {
             $this->clearState($userId);
-            $this->sendMessage($chatId, 'Ок, бронь отменена.');
+            $this->sendMessage($chatId, 'Бронь отменена ❌');
             $this->showMainMenu($chatId);
             return;
         }
@@ -273,18 +273,31 @@ class TelegramBotController extends Controller
             
             $this->saveState($userId, 'confirm_2', $state['data']);
             
-            $this->sendMessage(
-                $chatId,
-                "Вы уверены что хотите подтвердить бронь?\n\nЕсли передумали — жмите «Отмена».",
-                [
-                    'inline_keyboard' => [
-                        [
-                            ['text' => 'Отмена', 'callback_data' => 'cancel'],
-                            ['text' => 'Да, я хочу пиццу', 'callback_data' => 'confirm2'],
-                        ],
+            $text = "Вы уверены, что хотите подтвердить бронь? 🔒\n\n" .
+                "Если передумали — жмите «Отмена» ❌.";
+            
+            $keyboard = [
+                'inline_keyboard' => [
+                    
+                        ['text' => 'Отмена', 'callback_data' => 'cancel'],
+                        ['text' => 'Да, я хочу пиццу', 'callback_data' => 'confirm2'],
                     ],
-                ]
-            );
+                ],
+            ];
+            
+            if ($messageId) {
+                // заменяем текст того же сообщения
+                $this->tg('editMessageText', [
+                    'chat_id' => $chatId,
+                    'message_id' => $messageId,
+                    'text' => $text,
+                    'parse_mode' => 'HTML',
+                    'reply_markup' => json_encode($keyboard, JSON_UNESCAPED_UNICODE),
+                ]);
+            } else {
+                $this->sendMessage($chatId, $text, $keyboard);
+            }
+            
             return;
         }
         
@@ -295,7 +308,7 @@ class TelegramBotController extends Controller
                 return;
             }
             
-            $this->confirmBooking($chatId, $userId, $username, $state['data']);
+            $this->confirmBooking($chatId, $userId, $username, $state['data'], $messageId);
             $this->clearState($userId);
             return;
         }
@@ -315,9 +328,9 @@ class TelegramBotController extends Controller
         
         $this->sendMessage(
             $chatId,
-            "Привет! Это пицца-бот.\n\n" .
-            "• Нажмите «Показать свободные слоты», чтобы забронировать время.\n" .
-            "• Команда /my — посмотреть ваши брони.",
+            "Привет! Это пицца-бот 🍕🤖\n\n" .
+            "➡️ Нажмите «Показать свободные слоты», чтобы забронировать время.\n" .
+            "📋 Команда /my — посмотреть ваши брони.",
             $keyboard
         );
     }
@@ -340,7 +353,7 @@ class TelegramBotController extends Controller
             ->all();
         
         if (empty($slots)) {
-            $this->sendMessage($chatId, 'Свободных слотов пока нет. Попробуйте позже.');
+            $this->sendMessage($chatId, 'Свободных слотов пока нет 😔 Попробуйте позже чуть позже.');
             return;
         }
         
@@ -350,14 +363,14 @@ class TelegramBotController extends Controller
             'chosen_idx' => [],
         ]);
         
-        $lines = ['Свободные слоты:'];
+        $lines = ['Свободные слоты на сегодня ⏰:'];
         foreach ($slots as $i => $slot) {
             $num  = $i + 1;
             $time = Carbon::parse($slot['slot_time'])->format('H:i');
             $lines[] = "{$num}) {$time}";
         }
         $lines[] = '';
-        $lines[] = 'Нажмите на кнопки со слотами, которые хотите занять, затем на «Готово».';
+        $lines[] = '👇 Нажмите на кнопки со слотами, которые хотите занять, затем на «Готово».';
         
         $replyMarkup = [
             'inline_keyboard' => $this->buildSlotsKeyboard($slots, []),
@@ -398,8 +411,8 @@ class TelegramBotController extends Controller
             if ($idx[$i] !== $idx[$i - 1] + 1) {
                 $this->sendMessage(
                     $chatId,
-                    "Можно бронировать только подряд идущие слоты.\n" .
-                    "Примеры: 1, 12, 123."
+                    "⚠️ Можно бронировать только подряд идущие слоты.\n" .
+                    "Пожалуйста, выберите слоты снова."
                 );
                 return;
             }
@@ -471,10 +484,10 @@ class TelegramBotController extends Controller
         return $rows;
     }
     
-    protected function confirmBooking($chatId, int $userId, string $username, array $data): void
+    protected function confirmBooking($chatId, int $userId, string $username, array $data, ?int $messageId = null): void
     {
         $slots = $data['slots'] ?? [];
-        $idx = $data['chosen_idx'] ?? [];
+        $idx   = $data['chosen_idx'] ?? [];
         
         if (empty($slots) || empty($idx)) {
             $this->sendMessage($chatId, 'Не найден список выбранных слотов, начните заново.');
@@ -482,7 +495,7 @@ class TelegramBotController extends Controller
         }
         
         $chosen = [];
-        $ids = [];
+        $ids    = [];
         foreach ($idx as $n) {
             $slot = $slots[$n - 1];
             $chosen[] = $slot;
@@ -494,9 +507,9 @@ class TelegramBotController extends Controller
             return;
         }
         
-        $usernameShort = $username !== '' ? $username : (string)$userId;
+        $usernameShort = $username !== '' ? $username : (string) $userId;
         
-        $updated = DB::transaction(function () use ($ids, $userId, $usernameShort) {
+        $updated = \DB::transaction(function () use ($ids, $userId, $usernameShort) {
             return Slot::query()
                 ->whereIn('id', $ids)
                 ->whereNull('booked_by')
@@ -516,22 +529,35 @@ class TelegramBotController extends Controller
         }
         
         $times = array_map(
-            fn($s) => (new \Carbon\Carbon($s['slot_time']))->format('H:i'),
+            fn($s) => \Carbon\Carbon::parse($s['slot_time'])->format('H:i'),
             $chosen
         );
         
-        $this->sendMessage($chatId, 'Готово! За вами слоты: ' . implode(', ', $times));
+        $text = 'Готово! 🎉 За вами слоты: ' . implode(', ', $times) . " 🍕" .
+            "\n\n🧾 Посмотреть свои брони: /my";
         
-        $adminId = (int)config('services.telegram.admin_chat_id');
-        $label = $usernameShort[0] === '@' ? $usernameShort : '@' . $usernameShort;
+        
+        if ($messageId) {
+            // финальный текст вместо кнопок
+            $this->tg('editMessageText', [
+                'chat_id' => $chatId,
+                'message_id' => $messageId,
+                'text' => $text,
+                'parse_mode' => 'HTML',
+            ]);
+        } else {
+            $this->sendMessage($chatId, $text);
+        }
+        
+        // уведомление в админ-группу
+        $adminId = (int) config('services.telegram.admin_chat_id');
+        $label = str_starts_with($usernameShort, '@') ? $usernameShort : '@' . $usernameShort;
         
         $this->sendMessage(
             $adminId,
-            'Новая бронь:' . PHP_EOL .
+            '🍕 Новая бронь:' . PHP_EOL .
             '[' . implode(' ', $times) . ' ' . $label . ']'
         );
-        
-        $this->showMainMenu($chatId);
     }
     
     protected function showMyBookings($chatId, int $userId): void
@@ -542,11 +568,11 @@ class TelegramBotController extends Controller
             ->get(['slot_time']);
         
         if ($slots->isEmpty()) {
-            $this->sendMessage($chatId, 'За вами пока нет броней.');
+            $this->sendMessage($chatId, 'У вас пока нет броней 😴');
             return;
         }
         
-        $lines = ['Ваши брони:'];
+        $lines = ['🧾 Ваши брони:'];
         foreach ($slots as $slot) {
             $lines[] = $slot->slot_time->format('d.m H:i');
         }
@@ -562,7 +588,7 @@ class TelegramBotController extends Controller
             ->get(['slot_time', 'booked_by', 'booked_username']);
         
         if ($rows->isEmpty()) {
-            $this->sendMessage($chatId, 'Занятых слотов нет.');
+            $this->sendMessage($chatId, '📋 Занятых слотов нет.');
             return;
         }
         
@@ -601,7 +627,7 @@ class TelegramBotController extends Controller
             $chunks[] = '[' . implode(' ', $times) . ' ' . $label . ']';
         }
         
-        $this->sendMessage($chatId, "Занятые слоты:\n" . implode("\n", $chunks));
+        $this->sendMessage($chatId, "📋 Занятые слоты:\n" . implode("\n", $chunks));
     }
     
 }
