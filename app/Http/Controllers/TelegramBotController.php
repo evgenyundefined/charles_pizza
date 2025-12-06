@@ -518,49 +518,6 @@ class TelegramBotController extends Controller
             $state = $this->loadState($userId);
             $dataState = $state['data'] ?? [];
             
-            // проверяем только наличие данных, а не конкретный step
-            if (
-                !$state ||
-                empty($dataState['slots'] ?? []) ||
-                empty($dataState['chosen_idx'] ?? [])
-            ) {
-                $this->sendMessage($chatId, 'Сначала выберите слоты через «Показать свободные слоты».');
-                return;
-            }
-            
-            // переводим состояние к confirm_2
-            $this->saveState($userId, 'confirm_2', $dataState);
-            
-            $text = "Вы уверены, что хотите подтвердить бронь? 🔒\n\n" .
-                "Если передумали — жмите «Отмена» ❌.";
-            
-            $keyboard = [
-                'inline_keyboard' => [
-                    [
-                        ['text' => 'Отмена ❌', 'callback_data' => 'cancel'],
-                        ['text' => 'Да, я хочу пиццу 🍕', 'callback_data' => 'confirm2'],
-                    ],
-                ],
-            ];
-            
-            if ($messageId ?? null) {
-                $this->tg('editMessageText', [
-                    'chat_id' => $chatId,
-                    'message_id' => $messageId,
-                    'text' => $text,
-                    'parse_mode' => 'HTML',
-                    'reply_markup' => json_encode($keyboard, JSON_UNESCAPED_UNICODE),
-                ]);
-            } else {
-                $this->sendMessage($chatId, $text, $keyboard);
-            }
-            
-            return;
-        }
-        if ($data === 'confirm2') {
-            $state = $this->loadState($userId);
-            $dataState = $state['data'] ?? [];
-            
             if (
                 !$state ||
                 empty($dataState['slots'] ?? []) ||
@@ -570,13 +527,32 @@ class TelegramBotController extends Controller
                 return;
             }
             
+            // считаем выбранные времена для красоты
+            $slots = $dataState['slots'];
+            $idx   = $dataState['chosen_idx'];
+            
+            $chosen = [];
+            foreach ($idx as $n) {
+                if (isset($slots[$n - 1])) {
+                    $chosen[] = $slots[$n - 1];
+                }
+            }
+            
+            $times = array_map(
+                fn($s) => \Carbon\Carbon::parse($s['slot_time'])->format('H:i'),
+                $chosen
+            );
+            $timesText = implode(', ', $times);
+            
+            // запомним message_id, чтобы потом этим же сообщением показать "Готово!"
             if (($messageId ?? null) !== null) {
                 $dataState['message_id'] = $messageId;
             }
             
+            // сразу переходим к выбору "хочу комментарий / нет"
             $this->saveState($userId, 'comment_choice', $dataState);
             
-            $text = "Отлично! 🎉\n\n" .
+            $text = "Вы выбрали слоты ⏰: {$timesText}\n\n" .
                 "Хотите добавить комментарий к заказу? 💬\n" .
                 "Например: без лука, поострее, номер телефона и т.п.";
             
@@ -593,10 +569,10 @@ class TelegramBotController extends Controller
             
             if (($messageId ?? null) !== null) {
                 $this->tg('editMessageText', [
-                    'chat_id'    => $chatId,
-                    'message_id' => $messageId,
-                    'text'       => $text,
-                    'parse_mode' => 'HTML',
+                    'chat_id'      => $chatId,
+                    'message_id'   => $messageId,
+                    'text'         => $text,
+                    'parse_mode'   => 'HTML',
                     'reply_markup' => json_encode($keyboard, JSON_UNESCAPED_UNICODE),
                 ]);
             } else {
