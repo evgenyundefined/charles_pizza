@@ -665,7 +665,7 @@ class TelegramBotController extends Controller
             return;
         }
         if ($data === 'my_today') {
-            $this->showMyBookings($chatId, $userId, true);
+            $this->showMyBookings($chatId, $userId, false);
             return;
         }
         if ($data === 'my_history') {
@@ -697,7 +697,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
                     ['text' => self::BTN_SHOW_SLOTS,    'callback_data' => 'menu_show_slots'],
                 ],
                 [
-                    ['text' => self::BTN_MY_ORDERS,     'callback_data' => 'my_today'],
+                    //['text' => self::BTN_MY_ORDERS,     'callback_data' => 'my_today'],
                     ['text' => self::BTN_ORDER_HISTORY, 'callback_data' => 'my_history'],
                 ],
             ],
@@ -711,7 +711,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
                     ['text' => self::BTN_SHOW_SLOTS],
                 ],
                 [
-                    ['text' => self::BTN_MY_ORDERS],
+                    //['text' => self::BTN_MY_ORDERS],
                     ['text' => self::BTN_ORDER_HISTORY],
                 ],
             ],
