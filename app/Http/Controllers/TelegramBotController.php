@@ -166,7 +166,7 @@ class TelegramBotController extends Controller
             return;
         }
         if ($text === self::BTN_MY_ORDERS) {
-            $this->showMyBookings($chatId, $userId, true);
+            $this->showMyBookings($chatId, $userId, false);
             return;
         }
         if ($text === self::BTN_ORDER_HISTORY) {
