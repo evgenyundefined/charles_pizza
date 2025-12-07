@@ -697,7 +697,7 @@ class TelegramBotController extends Controller
             ->whereNull('booked_by')
             ->where('is_disabled', false)
             ->orderBy('slot_time')
-            ->limit(6)
+            ->limit(12)
             ->get(['id', 'slot_time'])
             ->map(function (Slot $slot) {
                 return [
