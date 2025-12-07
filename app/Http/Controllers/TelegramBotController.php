@@ -791,10 +791,10 @@ class TelegramBotController extends Controller
         ]);
         
         $lines = ['Свободные слоты на сегодня ⏰:'];
-        foreach ($slots as $i => $slot) {
+        /*foreach ($slots as $i => $slot) {
             $time = Carbon::parse($slot['slot_time'])->format('H:i');
             $lines[] = " {$time}";
-        }
+        }*/
         $lines[] = '';
         $lines[] = '👇 Нажмите на кнопки со слотами, которые хотите занять, затем на «Готово».';
         
@@ -903,9 +903,9 @@ class TelegramBotController extends Controller
         
         // текст — просто список времени
         $lines = ["Свободные слоты на " . $date->format('d.m.Y') . " ⏰:"];
-        foreach ($slotData as $s) {
+        /*foreach ($slotData as $s) {
             $lines[] = Carbon::parse($s['slot_time'])->format('H:i');
-        }
+        }*/
         
         // клавиатура строим через существующий helper,
         // он уже делает callback_data вида 'slot:1', 'slot:2', ...,
