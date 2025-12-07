@@ -697,7 +697,7 @@ class TelegramBotController extends Controller
             ->whereNull('booked_by')
             ->where('is_disabled', false)
             ->orderBy('slot_time')
-            ->limit(12)
+            ->limit(24)
             ->get(['id', 'slot_time'])
             ->map(function (Slot $slot) {
                 return [
@@ -719,11 +719,11 @@ class TelegramBotController extends Controller
         ]);
         
         $lines = ['Свободные слоты на сегодня ⏰:'];
-        foreach ($slots as $i => $slot) {
+        /*foreach ($slots as $i => $slot) {
             $time = Carbon::parse($slot['slot_time'])->format('H:i');
             $lines[] = " {$time}";
         }
-        $lines[] = '';
+        $lines[] = '';*/
         $lines[] = '👇 Нажмите на кнопки со слотами, которые хотите занять, затем на «Готово».';
         
         $replyMarkup = [
