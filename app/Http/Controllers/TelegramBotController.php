@@ -218,16 +218,10 @@ class TelegramBotController extends Controller
                     $this->adminClearBookedSlots($chatId);
                     break;
                 default:
-                    $this->sendMessage($chatId,
-                        "Команды /admin_slots:\n" .
-                        "/admin_slots – занятые слоты 🍕\n" .
-                        "/admin_slots available – свободные слоты ✅\n" .
-                        "/admin_slots disable HH:MM – выключить слот 🚫\n" .
-                        "/admin_slots enable HH:MM – включить слот обратно ✅\n" .
-                        "/admin_slots generate N – сгенерировать слоты на сегодня с шагом N минут ⏱️ \n" .
-                        "/admin_techworks enable – включить бота \n".
-                        "/admin_techworks disable – выключить бота 🚫 \n"
-                    );
+                    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $sub)) {
+                        $this->showAdminSlots($chatId, $sub);
+                        break;
+                    }
                     break;
             }
             
@@ -317,9 +311,13 @@ class TelegramBotController extends Controller
             if ($slot) {
                 $slot->is_completed = true;
                 $slot->save();
+                $date = $slot->slot_time->copy()->startOfDay();
+            } else {
+                $date = today();
             }
             
-            [$text, $replyMarkup] = $this->buildAdminSlotsView();
+            
+            [$text, $replyMarkup] = $this->buildAdminSlotsView($date);
             
             if ($messageId) {
                 $params = [
@@ -826,7 +824,7 @@ class TelegramBotController extends Controller
             ->whereNull('booked_by')
             ->where('is_disabled', false);
         
-        // Если дата — сегодня, убираем прошлые слоты
+        // если это сегодня — отрезаем прошлое время
         if ($date->isSameDay($now)) {
             $query->where('slot_time', '>', $now);
         }
@@ -844,60 +842,36 @@ class TelegramBotController extends Controller
             return;
         }
         
-        // Формируем данные для state
+        // готовим данные слотов в том же формате, что и showFreeSlots()
         $slotData = [];
-        $lines = ["Свободные слоты на " . $date->format('d.m.Y') . " ⏰:"];
-        $buttons = [];
-        $idx = 1;
-        
         foreach ($slots as $slot) {
-            $timeLabel = $slot->slot_time->format('H:i');
-            
             $slotData[] = [
                 'id'        => $slot->id,
                 'slot_time' => $slot->slot_time->toDateTimeString(),
             ];
-            
-            $lines[] = $timeLabel;
-            
-            $buttons[] = [
-                'text' => $timeLabel,
-                'callback_data' => 'slot_' . $idx,
-            ];
-            
-            $idx++;
         }
         
-        // Inline-клава: по 3 в ряд
-        $rows = [];
-        $row  = [];
-        foreach ($buttons as $btn) {
-            $row[] = $btn;
-            if (count($row) === 3) {
-                $rows[] = $row;
-                $row = [];
-            }
-        }
-        if ($row) {
-            $rows[] = $row;
+        // текст — просто список времени
+        $lines = ["Свободные слоты на " . $date->format('d.m.Y') . " ⏰:"];
+        foreach ($slotData as $s) {
+            $lines[] = Carbon::parse($s['slot_time'])->format('H:i');
         }
         
-        $rows[] = [
-            ['text' => 'Готово ✅', 'callback_data' => 'slots_done'],
-            ['text' => 'Отмена ❌', 'callback_data' => 'slots_cancel'],
+        // клавиатура строим через существующий helper,
+        // он уже делает callback_data вида 'slot:1', 'slot:2', ...,
+        // а также кнопки 'Готово' и 'Отмена' c 'slots_done' и 'cancel'
+        $keyboard = [
+            'inline_keyboard' => $this->buildSlotsKeyboard($slotData, []),
         ];
         
-        $keyboard = ['inline_keyboard' => $rows];
-        
-        // Сохраняем состояние так же, как раньше делал старый showFreeSlots
-        $this->saveState($userId, 'choose_slots', [
+        // самое главное: step = 'select_slots', как ожидают callback'и
+        $this->saveState($userId, 'select_slots', [
             'slots'      => $slotData,
             'chosen_idx' => [],
         ]);
         
         $this->sendMessage($chatId, implode("\n", $lines), $keyboard);
     }
-    
     
     protected function buildSlotsKeyboard(array $slots, array $selectedIdx = []): array
     {
@@ -1029,8 +1003,11 @@ class TelegramBotController extends Controller
         
         $label   = str_starts_with($usernameShort, '@') ? $usernameShort : '@' . $usernameShort;
         
+        $firstDate   = \Carbon\Carbon::parse($chosen[0]['slot_time']);
+        $dateLabel   = $firstDate->format('d.m.Y');
+        
         $adminText = '🍕 Новая бронь:' . PHP_EOL .
-            '[' . implode(' ', $times) . ' ' . $label . ']';
+            '[' . $dateLabel . ' ' . implode(' ', $times) . ' ' . $label . ']';
         
         if ($comment !== null && $comment !== '') {
             $adminText .= PHP_EOL . '💬 Комментарий: ' . $comment;
@@ -1126,9 +1103,23 @@ class TelegramBotController extends Controller
             $this->sendMessage($chatId, $text);
         }
     }
-    protected function showAdminSlots($chatId): void
+    protected function showAdminSlots($chatId, ?string $dateStr = null): void
     {
-        [$text, $replyMarkup] = $this->buildAdminSlotsView();
+        if ($dateStr) {
+            try {
+                $date = Carbon::createFromFormat('Y-m-d', $dateStr)->startOfDay();
+            } catch (\Exception $e) {
+                $this->sendMessage(
+                    $chatId,
+                    "Неверный формат даты.\nИспользуйте YYYY-MM-DD, например: 2025-12-08"
+                );
+                return;
+            }
+        } else {
+            $date = today();
+        }
+        
+        [$text, $replyMarkup] = $this->buildAdminSlotsView($date);
         
         if ($replyMarkup) {
             $this->sendMessage($chatId, $text, $replyMarkup);
@@ -1136,6 +1127,7 @@ class TelegramBotController extends Controller
             $this->sendMessage($chatId, $text);
         }
     }
+    
     protected function showAdminAvailableSlots(int $chatId, ?string $dateStr = null): void
     {
         $now = now();
@@ -1319,21 +1311,23 @@ class TelegramBotController extends Controller
             "Новых слотов создано: {$created}."
         );
     }
-    protected function buildAdminSlotsView(): array
+    protected function buildAdminSlotsView(?Carbon $date = null): array
     {
-        $today = now()->toDateString();
+        $date = $date ? $date->copy()->startOfDay() : today();
+        $dateStr   = $date->toDateString();      // 2025-12-08
+        $dateHuman = $date->format('d.m.Y');     // 08.12.2025
         
         $rows = Slot::query()
             ->whereNotNull('booked_by')
-            ->whereDate('slot_time', $today)   // ← фильтр только на сегодня
+            ->whereDate('slot_time', $dateStr)
             ->orderBy('slot_time')
             ->get(['id', 'slot_time', 'booked_by', 'booked_username', 'comment', 'is_completed']);
         
         if ($rows->isEmpty()) {
-            return ['На сегодня занятых слотов нет 🍀', null];
+            return ["На {$dateHuman} занятых слотов нет 🍀", null];
         }
         
-        $lines    = ["📋 Занятые слоты на сегодня ({$today}):"];
+        $lines    = ["📋 Занятые слоты на {$dateHuman} ({$dateStr}):"];
         $keyboard = ['inline_keyboard' => []];
         
         foreach ($rows as $slot) {
@@ -1369,6 +1363,7 @@ class TelegramBotController extends Controller
         
         return [implode("\n", $lines), $keyboard];
     }
+    
     
     protected function adminClearSlots($chatId): void
     {
