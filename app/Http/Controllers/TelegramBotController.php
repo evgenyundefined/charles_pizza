@@ -1398,7 +1398,7 @@ class TelegramBotController extends Controller
                 'slot_time' => $slot->slot_time->toDateTimeString(),
             ];
             
-            $lines[] = $timeLabel;
+            //$lines[] = $timeLabel;
             
             $buttons[] = [
                 'text' => $timeLabel,
