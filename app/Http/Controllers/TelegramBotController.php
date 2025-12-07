@@ -401,13 +401,13 @@ class TelegramBotController extends Controller
                 return;
             }
             
-            $now       = now();
-            $threshold = $now->copy()->subMinutes(10);
+            $now          = now();
+            $cancelBorder = $now->copy()->addHours(2);
             
-            if ($slot->is_completed
-                || !$slot->booked_at
-                || $slot->booked_at->lte($threshold)
-                || $slot->slot_time->lte($now)
+            if (
+                $slot->is_completed
+                || $slot->slot_time->lte($now)          // слот уже прошёл
+                || $slot->slot_time->lte($cancelBorder) // до слота меньше или равно 2 часов
             ) {
                 $this->sendMessage($chatId, 'Эту бронь уже нельзя отменить ⏰');
                 return;
