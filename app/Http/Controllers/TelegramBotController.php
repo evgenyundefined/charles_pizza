@@ -1140,12 +1140,18 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
             }
             
             // можно ли отменить? — пока до слота больше 2 часов
-          
+            if (
+                !$slot->is_completed
+            ) {
+                $cutoff = $slot->slot_time->copy()->subHours(2); // точка «за 2 часа до слота»
+                
+                if ($now->lt($cutoff)) {
                     $keyboard['inline_keyboard'][] = [[
                         'text' => "Отменить {$timeLabel} ❌",
                         'callback_data' => 'cancel_slot:' . $slot->id,
                     ]];
-                
+                }
+            }
         }
         
         if ($keyboard && empty($keyboard['inline_keyboard'])) {
