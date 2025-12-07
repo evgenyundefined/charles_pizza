@@ -13,9 +13,10 @@ use Illuminate\Support\Facades\Http;
 class TelegramBotController extends Controller
 {
     private const BTN_SHOW_SLOTS = 'Показать свободные слоты 🍕';
-    private const BTN_MY_ORDERS  = 'Мои заказы 📦';
+    private const BTN_MY_ORDERS = 'Мои заказы 📦';
     private const BTN_ORDER_HISTORY = 'История заказов 📜';
     private const CACHE_MAINTENANCE_KEY = 'pizza_bot.maintenance';
+    
     public function webhook(Request $request)
     {
         $update = $request->all();
@@ -38,6 +39,7 @@ class TelegramBotController extends Controller
             ->post("https://api.telegram.org/bot{$token}/{$method}", $params)
             ->json();
     }
+    
     protected function sendMessage($chatId, string $text, ?array $replyMarkup = null): void
     {
         $token = config('services.telegram.bot_token');
@@ -54,6 +56,7 @@ class TelegramBotController extends Controller
         
         $this->tg('sendMessage', $params);
     }
+    
     protected function answerCallback(string $callbackId, string $text = ''): void
     {
         $this->tg('answerCallbackQuery', [
@@ -66,12 +69,14 @@ class TelegramBotController extends Controller
     /* ================== STATE ================== */
     protected function isMaintenance(): bool
     {
-        return (bool) Cache::get(self::CACHE_MAINTENANCE_KEY, false);
+        return (bool)Cache::get(self::CACHE_MAINTENANCE_KEY, false);
     }
+    
     protected function setMaintenance(bool $on): void
     {
         Cache::forever(self::CACHE_MAINTENANCE_KEY, $on);
     }
+    
     protected function loadState(int $userId): ?array
     {
         $state = TelegramState::find($userId);
@@ -84,6 +89,7 @@ class TelegramBotController extends Controller
             'data' => $state->data ?? [],
         ];
     }
+    
     protected function saveState(int $userId, string $step, array $data = []): void
     {
         TelegramState::updateOrCreate(
@@ -91,6 +97,7 @@ class TelegramBotController extends Controller
             ['step' => $step, 'data' => $data]
         );
     }
+    
     protected function clearState(int $userId): void
     {
         TelegramState::where('user_id', $userId)->delete();
@@ -107,7 +114,7 @@ class TelegramBotController extends Controller
         );
         $text = trim($message['text'] ?? '');
         $state = $this->loadState($userId);
-        $adminChatId = (int) config('services.telegram.admin_chat_id');
+        $adminChatId = (int)config('services.telegram.admin_chat_id');
         
         if ($state && ($state['step'] ?? null) === 'comment') {
             $comment = trim($text);
@@ -125,7 +132,7 @@ class TelegramBotController extends Controller
                 $comment = null;
             }
             
-            $data      = $state['data'] ?? [];
+            $data = $state['data'] ?? [];
             $messageId = $data['message_id'] ?? null;
             
             $this->confirmBooking($chatId, $userId, $username, $data, $messageId, $comment);
@@ -185,8 +192,8 @@ class TelegramBotController extends Controller
             }
             
             $parts = preg_split('/\s+/', $text);
-            $sub   = strtolower($parts[1] ?? '');
-            $arg   = $parts[2] ?? null;
+            $sub = strtolower($parts[1] ?? '');
+            $arg = $parts[2] ?? null;
             
             switch ($sub) {
                 case '':
@@ -204,7 +211,7 @@ class TelegramBotController extends Controller
                     $this->adminEnableSlot($chatId, $arg);
                     break;
                 case 'generate':
-                    $interval = isset($parts[2]) ? (int) $parts[2] : 0;
+                    $interval = isset($parts[2]) ? (int)$parts[2] : 0;
                     if ($interval <= 0) {
                         $this->sendMessage($chatId, "Укажите шаг в минутах, например:\n/admin_slots generate 10\nили\n/admin_slots generate 15 2025-12-08");
                         return;
@@ -241,7 +248,7 @@ class TelegramBotController extends Controller
             }
             
             $parts = preg_split('/\s+/', $text);
-            $mode  = strtolower($parts[1] ?? '');
+            $mode = strtolower($parts[1] ?? '');
             
             if ($mode === 'disable') {
                 $this->setMaintenance(true);
@@ -286,15 +293,15 @@ class TelegramBotController extends Controller
     
     protected function handleCallback(array $callback): void
     {
-        $data      = $callback['data'] ?? '';
-        $userId    = $callback['from']['id'];
-        $chatId    = $callback['message']['chat']['id'];
-        $username  = $callback['from']['username'] ?? trim(
+        $data = $callback['data'] ?? '';
+        $userId = $callback['from']['id'];
+        $chatId = $callback['message']['chat']['id'];
+        $username = $callback['from']['username'] ?? trim(
             ($callback['from']['first_name'] ?? '') . ' ' . ($callback['from']['last_name'] ?? '')
         );
-        $cbId      = $callback['id'];
+        $cbId = $callback['id'];
         $messageId = $callback['message']['message_id'] ?? null;
-        $adminChatId = (int) config('services.telegram.admin_chat_id');
+        $adminChatId = (int)config('services.telegram.admin_chat_id');
         
         if ($chatId && $this->isMaintenance() && $chatId !== $adminChatId) {
             $cbId = $callback['id'] ?? null;
@@ -312,7 +319,7 @@ class TelegramBotController extends Controller
         $this->answerCallback($cbId);
         
         if (str_starts_with($data, 'done:')) {
-            $slotId = (int) substr($data, 5);
+            $slotId = (int)substr($data, 5);
             
             $slot = Slot::query()->find($slotId);
             if ($slot) {
@@ -328,9 +335,9 @@ class TelegramBotController extends Controller
             
             if ($messageId) {
                 $params = [
-                    'chat_id'    => $chatId,
+                    'chat_id' => $chatId,
                     'message_id' => $messageId,
-                    'text'       => $text,
+                    'text' => $text,
                     'parse_mode' => 'HTML',
                 ];
                 
@@ -350,7 +357,7 @@ class TelegramBotController extends Controller
             return;
         }
         if (str_starts_with($data, 'slot:')) {
-            $index = (int) substr($data, 5); // номера слотов 1..N
+            $index = (int)substr($data, 5); // номера слотов 1..N
             
             $state = $this->loadState($userId);
             if (!$state || $state['step'] !== 'select_slots') {
@@ -358,7 +365,7 @@ class TelegramBotController extends Controller
                 return;
             }
             
-            $slots  = $state['data']['slots'] ?? [];
+            $slots = $state['data']['slots'] ?? [];
             if ($index < 1 || $index > count($slots)) {
                 return;
             }
@@ -392,7 +399,7 @@ class TelegramBotController extends Controller
             return;
         }
         if (str_starts_with($data, 'cancel_slot:')) {
-            $slotId = (int) substr($data, strlen('cancel_slot:'));
+            $slotId = (int)substr($data, strlen('cancel_slot:'));
             
             $slot = Slot::query()->find($slotId);
             
@@ -401,31 +408,30 @@ class TelegramBotController extends Controller
                 return;
             }
             
-            $now          = now();
-            $cancelBorder = $now->copy()->addHours(2);
+            $now = now();
+            $cutoff = $slot->slot_time->copy()->subHours(2); // за 2 часа до слота
             
-            if (
-                $slot->is_completed
-                || $slot->slot_time->lte($now)          // слот уже прошёл
-                || $slot->slot_time->lte($cancelBorder) // до слота меньше или равно 2 часов
-            ) {
+            // Нельзя отменять, если:
+            // - заказ уже выполнен
+            // - время уже после cutoff (меньше 2 часов до слота)
+            if ($slot->is_completed || $now->gte($cutoff)) {
                 $this->sendMessage($chatId, 'Эту бронь уже нельзя отменить ⏰');
                 return;
             }
             
-            $timeLabel      = $slot->slot_time->format('H:i');
-            $usernameShort  = $slot->booked_username ?: $slot->booked_by;
+            $timeLabel = $slot->slot_time->format('H:i');
+            $usernameShort = $slot->booked_username ?: $slot->booked_by;
             
             $slot->update([
-                'booked_by'       => null,
+                'booked_by' => null,
                 'booked_username' => null,
-                'comment'         => null,
-                'is_completed'    => false,
-                'booked_at'       => null,
+                'comment' => null,
+                'is_completed' => false,
+                'booked_at' => null,
             ]);
             
             
-            $label   = is_string($usernameShort) && str_starts_with($usernameShort, '@')
+            $label = is_string($usernameShort) && str_starts_with($usernameShort, '@')
                 ? $usernameShort
                 : '@' . $usernameShort;
             
@@ -438,9 +444,9 @@ class TelegramBotController extends Controller
             
             if ($messageId ?? null) {
                 $params = [
-                    'chat_id'    => $chatId,
+                    'chat_id' => $chatId,
                     'message_id' => $messageId,
-                    'text'       => $text,
+                    'text' => $text,
                     'parse_mode' => 'HTML',
                 ];
                 if ($replyMarkup) {
@@ -485,7 +491,7 @@ class TelegramBotController extends Controller
             }
             
             $slots = $state['data']['slots'] ?? [];
-            $idx   = $state['data']['chosen_idx'] ?? [];
+            $idx = $state['data']['chosen_idx'] ?? [];
             
             if (empty($idx)) {
                 $this->sendMessage($chatId, 'Вы не выбрали ни одного слота 😅');
@@ -552,7 +558,7 @@ class TelegramBotController extends Controller
             
             // считаем выбранные времена для красоты
             $slots = $dataState['slots'];
-            $idx   = $dataState['chosen_idx'];
+            $idx = $dataState['chosen_idx'];
             
             $chosen = [];
             foreach ($idx as $n) {
@@ -592,10 +598,10 @@ class TelegramBotController extends Controller
             
             if (($messageId ?? null) !== null) {
                 $this->tg('editMessageText', [
-                    'chat_id'      => $chatId,
-                    'message_id'   => $messageId,
-                    'text'         => $text,
-                    'parse_mode'   => 'HTML',
+                    'chat_id' => $chatId,
+                    'message_id' => $messageId,
+                    'text' => $text,
+                    'parse_mode' => 'HTML',
                     'reply_markup' => json_encode($keyboard, JSON_UNESCAPED_UNICODE),
                 ]);
             } else {
@@ -626,9 +632,9 @@ class TelegramBotController extends Controller
             
             if (($messageId ?? null) !== null) {
                 $this->tg('editMessageText', [
-                    'chat_id'    => $chatId,
+                    'chat_id' => $chatId,
                     'message_id' => $messageId,
-                    'text'       => $text,
+                    'text' => $text,
                     'parse_mode' => 'HTML',
                 ]);
             } else {
@@ -694,7 +700,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         $inlineKeyboard = [
             'inline_keyboard' => [
                 [
-                    ['text' => self::BTN_SHOW_SLOTS,    'callback_data' => 'menu_show_slots'],
+                    ['text' => self::BTN_SHOW_SLOTS, 'callback_data' => 'menu_show_slots'],
                 ],
                 [
                     //['text' => self::BTN_MY_ORDERS,     'callback_data' => 'my_today'],
@@ -715,7 +721,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
                     ['text' => self::BTN_ORDER_HISTORY],
                 ],
             ],
-            'resize_keyboard'   => true,
+            'resize_keyboard' => true,
             'one_time_keyboard' => false,
         ];
         
@@ -725,6 +731,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
             $replyKeyboard
         );
     }
+    
     protected function showAdminAllActiveSlots(int $chatId): void
     {
         $now = now();
@@ -755,7 +762,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
             }
             
             $username = $slot->booked_username ?: $slot->booked_by;
-            if (!str_starts_with((string) $username, '@')) {
+            if (!str_starts_with((string)$username, '@')) {
                 $username = '@' . $username;
             }
             
@@ -813,6 +820,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         
         $this->sendMessage($chatId, implode("\n", $lines), $replyMarkup);
     }
+    
     protected function showFreeSlotsMenu(int $chatId, int $userId): void
     {
         $now = now();
@@ -905,7 +913,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         $slotData = [];
         foreach ($slots as $slot) {
             $slotData[] = [
-                'id'        => $slot->id,
+                'id' => $slot->id,
                 'slot_time' => $slot->slot_time->toDateTimeString(),
             ];
         }
@@ -925,7 +933,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         
         // самое главное: step = 'select_slots', как ожидают callback'и
         $this->saveState($userId, 'select_slots', [
-            'slots'      => $slotData,
+            'slots' => $slotData,
             'chosen_idx' => [],
         ]);
         
@@ -935,10 +943,10 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
     protected function buildSlotsKeyboard(array $slots, array $selectedIdx = []): array
     {
         $rows = [];
-        $row  = [];
+        $row = [];
         
         foreach ($slots as $i => $slot) {
-            $num  = $i + 1; // номер слота для пользователя
+            $num = $i + 1; // номер слота для пользователя
             $time = Carbon::parse($slot['slot_time'])->format('H:i');
             $selected = in_array($num, $selectedIdx, true);
             
@@ -965,6 +973,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         
         return $rows;
     }
+    
     protected function confirmBooking(
         $chatId,
         int $userId,
@@ -972,10 +981,11 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         array $data,
         ?int $messageId = null,
         ?string $comment = null
-    ): void {
+    ): void
+    {
         $slots = $data['slots'] ?? [];
-        $idx   = $data['chosen_idx'] ?? [];
-        $adminId = (int) config('services.telegram.admin_chat_id');
+        $idx = $data['chosen_idx'] ?? [];
+        $adminId = (int)config('services.telegram.admin_chat_id');
         
         if (empty($slots) || empty($idx)) {
             $this->sendMessage($chatId, 'Не найден список выбранных слотов, начните заново.');
@@ -983,16 +993,16 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         }
         
         $chosen = [];
-        $ids    = [];
+        $ids = [];
         
         foreach ($idx as $n) {
             if (!isset($slots[$n - 1])) {
                 continue;
             }
             
-            $slot      = $slots[$n - 1];
-            $chosen[]  = $slot;
-            $ids[]     = $slot['id'];
+            $slot = $slots[$n - 1];
+            $chosen[] = $slot;
+            $ids[] = $slot['id'];
         }
         
         if (empty($ids)) {
@@ -1000,7 +1010,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
             return;
         }
         
-        $usernameShort = $username !== '' ? $username : (string) $userId;
+        $usernameShort = $username !== '' ? $username : (string)$userId;
         
         $updated = \DB::transaction(function () use ($ids, $userId, $usernameShort, $comment) {
             return Slot::query()
@@ -1008,10 +1018,10 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
                 ->whereNull('booked_by')
                 ->where('is_disabled', false)
                 ->update([
-                    'booked_by'       => $userId,
+                    'booked_by' => $userId,
                     'booked_username' => $usernameShort,
-                    'comment'         => $comment,
-                    'booked_at'       => now(),
+                    'comment' => $comment,
+                    'booked_at' => now(),
                 ]);
         });
         
@@ -1025,7 +1035,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         }
         
         $times = array_map(
-            fn ($s) => \Carbon\Carbon::parse($s['slot_time'])->format('H:i'),
+            fn($s) => \Carbon\Carbon::parse($s['slot_time'])->format('H:i'),
             $chosen
         );
         
@@ -1037,7 +1047,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         $inlineKeyboard = [
             'inline_keyboard' => [
                 [
-                    ['text' => 'Мои заказы 📦',      'callback_data' => 'my_today'],
+                    ['text' => 'Мои заказы 📦', 'callback_data' => 'my_today'],
                 ],
                 [
                     ['text' => 'История заказов 📜', 'callback_data' => 'my_history'],
@@ -1047,9 +1057,9 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         
         if ($messageId) {
             $params = [
-                'chat_id'    => $chatId,
+                'chat_id' => $chatId,
                 'message_id' => $messageId,
-                'text'       => $text,
+                'text' => $text,
                 'parse_mode' => 'HTML',
                 'reply_markup' => json_encode($inlineKeyboard, JSON_UNESCAPED_UNICODE),
             ];
@@ -1060,10 +1070,10 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         }
         
         
-        $label   = str_starts_with($usernameShort, '@') ? $usernameShort : '@' . $usernameShort;
+        $label = str_starts_with($usernameShort, '@') ? $usernameShort : '@' . $usernameShort;
         
-        $firstDate   = \Carbon\Carbon::parse($chosen[0]['slot_time']);
-        $dateLabel   = $firstDate->format('d.m.Y');
+        $firstDate = \Carbon\Carbon::parse($chosen[0]['slot_time']);
+        $dateLabel = $firstDate->format('d.m.Y');
         
         $adminText = '🍕 Новая бронь:' . PHP_EOL .
             '[' . $dateLabel . ' ' . implode(' ', $times) . ' ' . $label . ']';
@@ -1074,6 +1084,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         
         $this->sendMessage($adminId, $adminText);
     }
+    
     protected function buildMyBookingsView(int $userId, bool $todayOnly = false): array
     {
         $query = Slot::query()
@@ -1102,8 +1113,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         ];
         
         $currentDate = null;
-        $now         = now();
-        $cancelBorder = $now->copy()->addHours(2); // можно отменять, пока до слота >= 2 часа
+        $now = now();
         
         // Клавиатура только для "Мои заказы" (сегодня)
         $keyboard = $todayOnly ? ['inline_keyboard' => []] : null;
@@ -1132,16 +1142,19 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
                 $lines[] = '   💬 ' . $slot->comment;
             }
             
-            // можно ли отменить?
+            // можно ли отменить? — пока до слота больше 2 часов
             if (
-                $todayOnly
-                && !$slot->is_completed
-                && $slot->slot_time->gt($cancelBorder)  // до слота больше 2х часов
+                $todayOnly &&
+                !$slot->is_completed
             ) {
-                $keyboard['inline_keyboard'][] = [[
-                    'text' => "Отменить {$timeLabel} ❌",
-                    'callback_data' => 'cancel_slot:' . $slot->id,
-                ]];
+                $cutoff = $slot->slot_time->copy()->subHours(2); // точка «за 2 часа до слота»
+                
+                if ($now->lt($cutoff)) {
+                    $keyboard['inline_keyboard'][] = [[
+                        'text' => "Отменить {$timeLabel} ❌",
+                        'callback_data' => 'cancel_slot:' . $slot->id,
+                    ]];
+                }
             }
         }
         
@@ -1151,6 +1164,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         
         return [implode("\n", $lines), $keyboard];
     }
+    
     
     protected function showMyBookings($chatId, int $userId, bool $todayOnly = false): void
     {
@@ -1162,6 +1176,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
             $this->sendMessage($chatId, $text);
         }
     }
+    
     protected function showAdminSlots($chatId, ?string $dateStr = null): void
     {
         if ($dateStr) {
@@ -1274,6 +1289,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         
         $this->sendMessage($chatId, "Слот {$dt->format('H:i')} помечен как недоступный 🚫");
     }
+    
     protected function adminEnableSlot($chatId, ?string $timeStr): void
     {
         if (!$timeStr) {
@@ -1315,6 +1331,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         
         $this->sendMessage($chatId, "Слот {$dt->format('H:i')} снова доступен ✅");
     }
+    
     protected function adminGenerateSlots(int $chatId, int $intervalMinutes, ?string $dateStr = null): void
     {
         // 1) Дата
@@ -1340,7 +1357,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         
         // 3) Диапазон времени (можно под себя подправить)
         $start = $date->copy()->setTime(15, 0); // 15:00
-        $end   = $date->copy()->setTime(20, 0); // 20:00
+        $end = $date->copy()->setTime(20, 0); // 20:00
         
         $created = 0;
         
@@ -1349,12 +1366,12 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
             $slot = Slot::query()->firstOrCreate(
                 ['slot_time' => $time],
                 [
-                    'is_disabled'    => false,
-                    'booked_by'      => null,
-                    'booked_username'=> null,
-                    'comment'        => null,
-                    'is_completed'   => false,
-                    'booked_at'      => null,
+                    'is_disabled' => false,
+                    'booked_by' => null,
+                    'booked_username' => null,
+                    'comment' => null,
+                    'is_completed' => false,
+                    'booked_at' => null,
                 ]
             );
             
@@ -1370,10 +1387,11 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
             "Новых слотов создано: {$created}."
         );
     }
+    
     protected function buildAdminSlotsView(?Carbon $date = null): array
     {
         $date = $date ? $date->copy()->startOfDay() : today();
-        $dateStr   = $date->toDateString();      // 2025-12-08
+        $dateStr = $date->toDateString();      // 2025-12-08
         $dateHuman = $date->format('d.m.Y');     // 08.12.2025
         
         $rows = Slot::query()
@@ -1386,7 +1404,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
             return ["На {$dateHuman} занятых слотов нет 🍀", null];
         }
         
-        $lines    = ["📋 Занятые слоты на {$dateHuman} ({$dateStr}):"];
+        $lines = ["📋 Занятые слоты на {$dateHuman} ({$dateStr}):"];
         $keyboard = ['inline_keyboard' => []];
         
         foreach ($rows as $slot) {
@@ -1394,7 +1412,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
             $time = $slot->slot_time->format('H:i');
             
             $username = $slot->booked_username ?: $slot->booked_by;
-            if (!str_starts_with((string) $username, '@')) {
+            if (!str_starts_with((string)$username, '@')) {
                 $username = '@' . $username;
             }
             
@@ -1441,7 +1459,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
             $date = today();
         }
         
-        $dateDb    = $date->toDateString();      // для whereDate
+        $dateDb = $date->toDateString();      // для whereDate
         $dateHuman = $date->format('d.m.Y');     // для текста
         
         // сначала проверим, нет ли броней
@@ -1470,6 +1488,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
             "Удалено записей: {$total}."
         );
     }
+    
     protected function adminClearBookedSlots($chatId, ?string $dateStr = null): void
     {
         // определяем дату
@@ -1487,7 +1506,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
             $date = today();
         }
         
-        $dateDb    = $date->toDateString();
+        $dateDb = $date->toDateString();
         $dateHuman = $date->format('d.m.Y');
         
         // сколько сейчас занято
@@ -1509,11 +1528,11 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
             ->whereDate('slot_time', $dateDb)
             ->whereNotNull('booked_by')
             ->update([
-                'booked_by'       => null,
+                'booked_by' => null,
                 'booked_username' => null,
-                'comment'         => null,
-                'is_completed'    => false,
-                'booked_at'       => null,
+                'comment' => null,
+                'is_completed' => false,
+                'booked_at' => null,
             ]);
         
         $this->sendMessage(
