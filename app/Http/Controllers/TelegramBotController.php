@@ -155,6 +155,7 @@ class TelegramBotController extends Controller
                 "/admin_slots disable HH:MM – выключить слот на сегодня 🚫\n" .
                 "/admin_slots enable HH:MM – включить слот обратно на сегодня ✅\n" .
                 "/admin_slots clear – удалить слоты\n" .
+                "/admin_slots clear_booked – сбросить все брони на сегодня, слоты остаются 🔄\n" .
                 "/admin_slots generate N – сгенерировать слоты на сегодня с шагом N минут ⏱️ (например 10, 15)\n\n" .
                 
                 "Техработы:\n" .
@@ -207,7 +208,9 @@ class TelegramBotController extends Controller
                 case 'clear':
                         $this->adminClearSlots($chatId);
                     break;
-                    
+                case 'clear_booked':
+                    $this->adminClearBookedSlots($chatId);
+                    break;
                 default:
                     $this->sendMessage($chatId,
                         "Команды /admin_slots:\n" .
@@ -1254,5 +1257,42 @@ class TelegramBotController extends Controller
             "Удалено записей: {$total}."
         );
     }
+    protected function adminClearBookedSlots($chatId): void
+    {
+        $today = now()->toDateString();
+        
+        // сколько сейчас занято
+        $bookedCount = Slot::query()
+            ->whereDate('slot_time', $today)
+            ->whereNotNull('booked_by')
+            ->count();
+        
+        if ($bookedCount === 0) {
+            $this->sendMessage(
+                $chatId,
+                "На сегодня нет занятых слотов — сбрасывать нечего 🙂"
+            );
+            return;
+        }
+        
+        // сбрасываем только занятые на сегодня
+        $updated = Slot::query()
+            ->whereDate('slot_time', $today)
+            ->whereNotNull('booked_by')
+            ->update([
+                'booked_by'       => null,
+                'booked_username' => null,
+                'comment'         => null,
+                'is_completed'    => false,
+                'booked_at'       => null,
+            ]);
+        
+        $this->sendMessage(
+            $chatId,
+            "🔄 Занятые брони на сегодня ({$today}) сброшены.\n" .
+            "Освобождено слотов: {$updated}."
+        );
+    }
+    
     
 }
