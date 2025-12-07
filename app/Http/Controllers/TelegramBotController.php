@@ -154,6 +154,7 @@ class TelegramBotController extends Controller
                 "/admin_slots available – свободные слоты на сегодня ✅\n" .
                 "/admin_slots disable HH:MM – выключить слот на сегодня 🚫\n" .
                 "/admin_slots enable HH:MM – включить слот обратно на сегодня ✅\n" .
+                "/admin_slots clear – удалить слоты\n" .
                 "/admin_slots generate N – сгенерировать слоты на сегодня с шагом N минут ⏱️ (например 10, 15)\n\n" .
                 
                 "Техработы:\n" .
@@ -203,6 +204,10 @@ class TelegramBotController extends Controller
                 case 'generate':
                     $this->adminGenerateSlots($chatId, $arg);
                     break;
+                case 'clear':
+                        $this->adminClearSlots($chatId);
+                    break;
+                    
                 default:
                     $this->sendMessage($chatId,
                         "Команды /admin_slots:\n" .
@@ -1218,6 +1223,36 @@ class TelegramBotController extends Controller
         }
         
         return [implode("\n", $lines), $keyboard];
+    }
+    protected function adminClearSlots($chatId): void
+    {
+        $today = now()->toDateString();
+        
+        // сначала проверим, нет ли броней
+        $bookedCount = Slot::query()
+            ->whereDate('slot_time', $today)
+            ->whereNotNull('booked_by')
+            ->count();
+        
+        if ($bookedCount > 0) {
+            $this->sendMessage(
+                $chatId,
+                "На сегодня уже есть забронированные слоты ({$bookedCount} шт.), " .
+                "очистка отменена ❌"
+            );
+            return;
+        }
+        
+        // удаляем все слоты на сегодня
+        $total = Slot::query()
+            ->whereDate('slot_time', $today)
+            ->delete();
+        
+        $this->sendMessage(
+            $chatId,
+            "🧹 Все слоты на сегодня ({$today}) удалены.\n" .
+            "Удалено записей: {$total}."
+        );
     }
     
 }
