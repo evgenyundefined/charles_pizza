@@ -193,7 +193,7 @@ class TelegramBotController extends Controller
                     $this->showAdminSlots($chatId);
                     break;
                 case 'available':
-                case 'availiable': // на всякий случай, если напишешь с опечаткой :)
+                case 'availiable':
                     $this->showAdminAvailableSlots($chatId);
                     break;
                 case 'disable':
@@ -684,11 +684,11 @@ class TelegramBotController extends Controller
             'one_time_keyboard' => false,
         ];
         
-        /*$this->sendMessage(
+        $this->sendMessage(
             $chatId,
             "Меню на клавиатуре снизу 👇",
             $replyKeyboard
-        );*/
+        );
     }
     protected function showFreeSlots($chatId, int $userId): void
     {
@@ -731,86 +731,6 @@ class TelegramBotController extends Controller
         ];
         
         $this->sendMessage($chatId, implode("\n", $lines), $replyMarkup);
-    }
-    protected function handleSlotDigits(int $chatId, int $userId, string $text): void
-    {
-        // оставляем только цифры
-        $digits = preg_replace('/\D+/', '', $text);
-        if ($digits === '') {
-            $this->sendMessage(
-                $chatId,
-                "Используйте только номера слотов, например: 1, 12, 123."
-            );
-            return;
-        }
-        
-        $state = $this->loadState($userId);
-        if (!$state || empty($state['data']['slots'] ?? [])) {
-            $this->sendMessage(
-                $chatId,
-                "Сначала нажмите «Показать свободные слоты 🍕»."
-            );
-            return;
-        }
-        
-        $slots = $state['data']['slots'];
-        $idx   = [];
-        
-        // разбираем строку на отдельные цифры
-        foreach (preg_split('//u', $digits, -1, PREG_SPLIT_NO_EMPTY) as $ch) {
-            $n = (int) $ch;
-            if ($n < 1 || $n > count($slots)) {
-                $this->sendMessage(
-                    $chatId,
-                    "Номер слота {$n} вне диапазона. Попробуйте ещё раз."
-                );
-                return;
-            }
-            if (!in_array($n, $idx, true)) {
-                $idx[] = $n;
-            }
-        }
-        
-        sort($idx);
-        
-        // проверяем, что слоты идут подряд
-        for ($i = 1; $i < count($idx); $i++) {
-            if ($idx[$i] !== $idx[$i - 1] + 1) {
-                $this->sendMessage(
-                    $chatId,
-                    "Можно бронировать только подряд идущие слоты.\n" .
-                    "Попробуйте ещё раз."
-                );
-                return;
-            }
-        }
-        
-        // сохраняем выбранные индексы в state
-        $state['data']['chosen_idx'] = $idx;
-        $this->saveState($userId, 'confirm_1', $state['data']);
-        
-        // строим список времени выбранных слотов
-        $chosen = [];
-        foreach ($idx as $n) {
-            $chosen[] = $slots[$n - 1];
-        }
-        
-        $times = array_map(
-            fn($s) => \Carbon\Carbon::parse($s['slot_time'])->format('H:i'),
-            $chosen
-        );
-        
-        $outText = "Вы выбрали слоты ⏰: " . implode(', ', $times) . "\n\nПодтверждаете бронь? ✅";
-        $keyboard = [
-            'inline_keyboard' => [
-                [
-                    ['text' => 'Отмена ❌', 'callback_data' => 'cancel'],
-                    ['text' => 'Подтверждаю бронь ✅', 'callback_data' => 'confirm1'],
-                ],
-            ],
-        ];
-        
-        $this->sendMessage($chatId, $outText, $keyboard);
     }
     protected function buildSlotsKeyboard(array $slots, array $selectedIdx = []): array
     {
