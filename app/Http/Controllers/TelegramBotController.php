@@ -1384,58 +1384,36 @@ class TelegramBotController extends Controller
             return;
         }
         
-        // Сохраняем слоты в state
+        // готовим данные слотов в том же формате, что и showFreeSlots()
         $slotData = [];
-        $lines = ["Свободные слоты на " . $date->format('d.m.Y') . " ⏰:"];
-        $buttons = [];
-        $idx = 1;
-        
         foreach ($slots as $slot) {
-            $timeLabel = $slot->slot_time->format('H:i');
-            
             $slotData[] = [
                 'id'        => $slot->id,
                 'slot_time' => $slot->slot_time->toDateTimeString(),
             ];
-            
-            //$lines[] = $timeLabel;
-            
-            $buttons[] = [
-                'text' => $timeLabel,
-                'callback_data' => 'slot_' . $idx,
-            ];
-            
-            $idx++;
         }
         
-        // inline клавиатура (по 3 в ряд)
-        $keyboardRows = [];
-        $row = [];
-        foreach ($buttons as $button) {
-            $row[] = $button;
-            if (count($row) === 3) {
-                $keyboardRows[] = $row;
-                $row = [];
-            }
-        }
-        if ($row) {
-            $keyboardRows[] = $row;
+        // текст — просто список времени
+        $lines = ["Свободные слоты на " . $date->format('d.m.Y') . " ⏰:"];
+        foreach ($slotData as $s) {
+            $lines[] = Carbon::parse($s['slot_time'])->format('H:i');
         }
         
-        $keyboardRows[] = [
-            ['text' => 'Готово ✅', 'callback_data' => 'slots_done'],
-            ['text' => 'Отмена ❌', 'callback_data' => 'slots_cancel'],
+        // клавиатура строим через существующий helper,
+        // он уже делает callback_data вида 'slot:1', 'slot:2', ...,
+        // а также кнопки 'Готово' и 'Отмена' c 'slots_done' и 'cancel'
+        $keyboard = [
+            'inline_keyboard' => $this->buildSlotsKeyboard($slotData, []),
         ];
         
-        $keyboard = ['inline_keyboard' => $keyboardRows];
-        
-        // сохраняем состояние выбора слотов
-        $this->saveState($userId, 'choose_slots', [
-            'slots'       => $slotData,
-            'chosen_idx'  => [],
+        // самое главное: step = 'select_slots', как ожидают callback'и
+        $this->saveState($userId, 'select_slots', [
+            'slots'      => $slotData,
+            'chosen_idx' => [],
         ]);
         
         $this->sendMessage($chatId, implode("\n", $lines), $keyboard);
     }
+    
     
 }
