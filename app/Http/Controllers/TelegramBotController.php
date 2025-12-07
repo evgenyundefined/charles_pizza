@@ -1155,9 +1155,9 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
             }
         }
         
-        if ($keyboard && empty($keyboard['inline_keyboard'])) {
-            $keyboard = null;
-        }
+        //if ($keyboard && empty($keyboard['inline_keyboard'])) {
+        //    $keyboard = null;
+        //}
         
         return [implode("\n", $lines), $keyboard];
     }
