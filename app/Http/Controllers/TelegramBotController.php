@@ -1181,16 +1181,19 @@ class TelegramBotController extends Controller
     }
     protected function buildAdminSlotsView(): array
     {
+        $today = now()->toDateString();
+        
         $rows = Slot::query()
             ->whereNotNull('booked_by')
+            ->whereDate('slot_time', $today)   // ← фильтр только на сегодня
             ->orderBy('slot_time')
             ->get(['id', 'slot_time', 'booked_by', 'booked_username', 'comment', 'is_completed']);
         
         if ($rows->isEmpty()) {
-            return ['Занятых слотов нет.', null];
+            return ['На сегодня занятых слотов нет 🍀', null];
         }
         
-        $lines    = ["📋 Занятые слоты:"];
+        $lines    = ["📋 Занятые слоты на сегодня ({$today}):"];
         $keyboard = ['inline_keyboard' => []];
         
         foreach ($rows as $slot) {
@@ -1209,11 +1212,10 @@ class TelegramBotController extends Controller
             }
             
             if ($slot->is_completed) {
-                // уже выполнен — просто галочка
                 $line .= " ✅";
             } else {
                 $keyboard['inline_keyboard'][] = [[
-                    'text' => "Выполнен {$time} {$username} ✅",
+                    'text' => "Выполнен {$time} ✅",
                     'callback_data' => 'done:' . $slot->id,
                 ]];
             }
@@ -1227,6 +1229,7 @@ class TelegramBotController extends Controller
         
         return [implode("\n", $lines), $keyboard];
     }
+    
     protected function adminClearSlots($chatId): void
     {
         $today = now()->toDateString();
