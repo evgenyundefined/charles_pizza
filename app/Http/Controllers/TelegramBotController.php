@@ -151,6 +151,7 @@ class TelegramBotController extends Controller
                 
                 "Слоты:\n" .
                 "/admin_slots [YYYY-MM-DD] – занятые слоты 🍕 (кнопки «Выполнен» отмечают заказ как выполненный ✅)\n" .
+                "/admin_slots all – все активные (не просроченные) брони 📅\n" .
                 "/admin_slots available [YYYY-MM-DD] – свободные слоты на дату (по умолчанию сегодня) ✅\n" .
                 "/admin_slots disable HH:MM – выключить слот на сегодня 🚫\n" .
                 "/admin_slots enable HH:MM – включить слот обратно на сегодня ✅\n" .
@@ -216,6 +217,9 @@ class TelegramBotController extends Controller
                     break;
                 case 'clear_booked':
                     $this->adminClearBookedSlots($chatId);
+                    break;
+                case 'all':
+                    $this->showAdminAllActiveSlots($chatId);
                     break;
                 default:
                     if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $sub)) {
@@ -712,6 +716,52 @@ class TelegramBotController extends Controller
             $replyKeyboard
         );
     }
+    protected function showAdminAllActiveSlots(int $chatId): void
+    {
+        $now = now();
+        
+        $slots = Slot::query()
+            ->whereNotNull('booked_by')
+            ->where('slot_time', '>', $now)              // только не прошедшие
+            ->orderBy('slot_time')
+            ->get(['slot_time', 'booked_by', 'booked_username', 'comment', 'is_completed']);
+        
+        if ($slots->isEmpty()) {
+            $this->sendMessage($chatId, "Активных (не просроченных) броней сейчас нет 🍀");
+            return;
+        }
+        
+        $lines = ["📋 Все активные брони (не просрочены):"];
+        $currentDate = null;
+        
+        foreach ($slots as $slot) {
+            /** @var \App\Models\Slot $slot */
+            $dateLabel = $slot->slot_time->format('d.m.Y');
+            $timeLabel = $slot->slot_time->format('H:i');
+            
+            if ($dateLabel !== $currentDate) {
+                $currentDate = $dateLabel;
+                $lines[] = "";               // пустая строка между датами
+                $lines[] = "📅 {$dateLabel}";
+            }
+            
+            $username = $slot->booked_username ?: $slot->booked_by;
+            if (!str_starts_with((string) $username, '@')) {
+                $username = '@' . $username;
+            }
+            
+            $status = $slot->is_completed ? '✅ выполнен' : '⏳ ожидает';
+            
+            $lines[] = "• {$timeLabel} — {$username} — {$status}";
+            
+            if (!empty($slot->comment)) {
+                $lines[] = '   💬 ' . $slot->comment;
+            }
+        }
+        
+        $this->sendMessage($chatId, implode("\n", $lines));
+    }
+    
     protected function showFreeSlots($chatId, int $userId): void
     {
         $slots = Slot::query()
