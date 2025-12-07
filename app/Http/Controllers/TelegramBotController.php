@@ -155,8 +155,8 @@ class TelegramBotController extends Controller
                 "/admin_slots available [YYYY-MM-DD] – свободные слоты на дату (по умолчанию сегодня) ✅\n" .
                 "/admin_slots disable HH:MM – выключить слот на сегодня 🚫\n" .
                 "/admin_slots enable HH:MM – включить слот обратно на сегодня ✅\n" .
-                "/admin_slots clear – удалить слоты\n" .
-                "/admin_slots clear_booked – сбросить все брони на сегодня, слоты остаются 🔄\n" .
+                "/admin_slots clear [YYYY-MM-DD] – удалить все слоты на дату (по умолчанию сегодня, если нет броней) 🧹\n" .
+                "/admin_slots clear_booked [YYYY-MM-DD] – сбросить брони на дату, слоты остаются 🔄\n" .
                 "/admin_slots generate N [YYYY-MM-DD] – сгенерировать слоты на сегодня с шагом N минут ⏱️ (например 10, 15)\n\n" .
                 "Техработы:\n" .
                 "/admin_techworks disable – включить режим технического обслуживания 🚧 (бот отвечает всем заглушкой)\n" .
@@ -213,10 +213,13 @@ class TelegramBotController extends Controller
                     $this->adminGenerateSlots($chatId, $interval, $dateStr);
                     break;
                 case 'clear':
-                        $this->adminClearSlots($chatId);
+                    // опционально: /admin_slots clear YYYY-MM-DD
+                    $this->adminClearSlots($chatId, $arg);
                     break;
+                
                 case 'clear_booked':
-                    $this->adminClearBookedSlots($chatId);
+                    // опционально: /admin_slots clear_booked YYYY-MM-DD
+                    $this->adminClearBookedSlots($chatId, $arg);
                     break;
                 case 'all':
                     $this->showAdminAllActiveSlots($chatId);
@@ -1415,57 +1418,89 @@ class TelegramBotController extends Controller
     }
     
     
-    protected function adminClearSlots($chatId): void
+    protected function adminClearSlots($chatId, ?string $dateStr = null): void
     {
-        $today = now()->toDateString();
+        // определяем дату
+        if ($dateStr) {
+            try {
+                $date = Carbon::createFromFormat('Y-m-d', $dateStr)->startOfDay();
+            } catch (\Exception $e) {
+                $this->sendMessage(
+                    $chatId,
+                    "Неверный формат даты.\nИспользуйте YYYY-MM-DD, например: 2025-12-08"
+                );
+                return;
+            }
+        } else {
+            $date = today();
+        }
+        
+        $dateDb    = $date->toDateString();      // для whereDate
+        $dateHuman = $date->format('d.m.Y');     // для текста
         
         // сначала проверим, нет ли броней
         $bookedCount = Slot::query()
-            ->whereDate('slot_time', $today)
+            ->whereDate('slot_time', $dateDb)
             ->whereNotNull('booked_by')
             ->count();
         
         if ($bookedCount > 0) {
             $this->sendMessage(
                 $chatId,
-                "На сегодня уже есть забронированные слоты ({$bookedCount} шт.), " .
+                "На {$dateHuman} уже есть забронированные слоты ({$bookedCount} шт.), " .
                 "очистка отменена ❌"
             );
             return;
         }
         
-        // удаляем все слоты на сегодня
+        // удаляем все слоты на эту дату
         $total = Slot::query()
-            ->whereDate('slot_time', $today)
+            ->whereDate('slot_time', $dateDb)
             ->delete();
         
         $this->sendMessage(
             $chatId,
-            "🧹 Все слоты на сегодня ({$today}) удалены.\n" .
+            "🧹 Все слоты на {$dateHuman} ({$dateDb}) удалены.\n" .
             "Удалено записей: {$total}."
         );
     }
-    protected function adminClearBookedSlots($chatId): void
+    protected function adminClearBookedSlots($chatId, ?string $dateStr = null): void
     {
-        $today = now()->toDateString();
+        // определяем дату
+        if ($dateStr) {
+            try {
+                $date = Carbon::createFromFormat('Y-m-d', $dateStr)->startOfDay();
+            } catch (\Exception $e) {
+                $this->sendMessage(
+                    $chatId,
+                    "Неверный формат даты.\nИспользуйте YYYY-MM-DD, например: 2025-12-08"
+                );
+                return;
+            }
+        } else {
+            $date = today();
+        }
+        
+        $dateDb    = $date->toDateString();
+        $dateHuman = $date->format('d.m.Y');
         
         // сколько сейчас занято
         $bookedCount = Slot::query()
-            ->whereDate('slot_time', $today)
+            ->whereDate('slot_time', $dateDb)
             ->whereNotNull('booked_by')
             ->count();
         
         if ($bookedCount === 0) {
             $this->sendMessage(
                 $chatId,
-                "На сегодня нет занятых слотов — сбрасывать нечего 🙂"
+                "На {$dateHuman} нет занятых слотов — сбрасывать нечего 🙂"
             );
             return;
         }
         
-        // сбрасываем только занятые на сегодня
+        // сбрасываем только занятые на эту дату
         $updated = Slot::query()
-            ->whereDate('slot_time', $today)
+            ->whereDate('slot_time', $dateDb)
             ->whereNotNull('booked_by')
             ->update([
                 'booked_by'       => null,
@@ -1477,7 +1512,7 @@ class TelegramBotController extends Controller
         
         $this->sendMessage(
             $chatId,
-            "🔄 Занятые брони на сегодня ({$today}) сброшены.\n" .
+            "🔄 Занятые брони на {$dateHuman} ({$dateDb}) сброшены.\n" .
             "Освобождено слотов: {$updated}."
         );
     }
