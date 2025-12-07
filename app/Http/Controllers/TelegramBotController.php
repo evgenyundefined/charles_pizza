@@ -1102,8 +1102,8 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         ];
         
         $currentDate = null;
-        $now        = now();
-        $threshold  = $now->copy()->subMinutes(10);
+        $now         = now();
+        $cancelBorder = $now->copy()->addHours(2); // можно отменять, пока до слота >= 2 часа
         
         // Клавиатура только для "Мои заказы" (сегодня)
         $keyboard = $todayOnly ? ['inline_keyboard' => []] : null;
@@ -1133,11 +1133,10 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
             }
             
             // можно ли отменить?
-            if ($todayOnly
+            if (
+                $todayOnly
                 && !$slot->is_completed
-                && $slot->booked_at
-                && $slot->booked_at->gt($threshold)   // прошло < 10 минут
-                && $slot->slot_time->gt($now)         // и слот ещё не в прошлом
+                && $slot->slot_time->gt($cancelBorder)  // до слота больше 2х часов
             ) {
                 $keyboard['inline_keyboard'][] = [[
                     'text' => "Отменить {$timeLabel} ❌",
@@ -1152,6 +1151,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         
         return [implode("\n", $lines), $keyboard];
     }
+    
     protected function showMyBookings($chatId, int $userId, bool $todayOnly = false): void
     {
         [$text, $replyMarkup] = $this->buildMyBookingsView($userId, $todayOnly);
