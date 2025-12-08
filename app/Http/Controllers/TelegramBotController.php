@@ -1791,15 +1791,10 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
             }
             
             if ($slot->is_completed) {
+                // заказ уже выполнен — только текст с ✅, без кнопок
                 $line .= " ✅";
-                
-                // даже выполненный можно отменить админом
-                $keyboard['inline_keyboard'][] = [[
-                    'text' => "Отменить {$username} {$time} ❌",
-                    'callback_data' => 'admin_cancel:' . $slot->id,
-                ]];
             } else {
-                // две кнопки в одной строке: Выполнен / Отменить
+                // ещё не выполнен — показываем обе кнопки
                 $keyboard['inline_keyboard'][] = [
                     [
                         'text' => "Выполнен {$username} {$time} ✅",
