@@ -3,12 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Models\Slot;
+use App\Models\TelegramMessage;
 use App\Models\TelegramState;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
 use App\Models\TelegramUser;
+use Illuminate\Support\Facades\Log;
+
 class TelegramBotController extends Controller
 {
     private const BTN_SHOW_SLOTS = 'Показать свободные слоты 🍕';
@@ -131,7 +134,7 @@ class TelegramBotController extends Controller
                 $phone = $contact['phone_number'];
             }
         }
-        
+        $this->logIncomingMessage($message);
         // СИНХРОНИЗАЦИЯ пользователя
         $this->syncTelegramUser($message, $chatId, $phone);
         
@@ -399,6 +402,7 @@ class TelegramBotController extends Controller
         $messageId = $callback['message']['message_id'] ?? null;
         $adminChatId = (int)config('services.telegram.admin_chat_id');
         
+        $this->logIncomingCallback($callback);
         $this->syncTelegramUser($callback['from'] , $chatId, );
         
         if ($chatId && $this->isMaintenance() && $chatId !== $adminChatId) {
@@ -892,6 +896,42 @@ class TelegramBotController extends Controller
             return;
         }
         
+    }
+    
+    /* ================== LOGGING ================== */
+    
+    protected function logIncomingMessage(array $message): void
+    {
+        try {
+            TelegramMessage::create([
+                'telegram_id' => $message['from']['id'] ?? null,
+                'chat_id'     => (string)($message['chat']['id'] ?? ''),
+                'direction'   => 'in',
+                'type'        => 'message',
+                'message_id'  => $message['message_id'] ?? null,
+                'text'        => $message['text'] ?? null,
+                'payload'     => $message,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('TG logIncomingMessage error: ' . $e->getMessage());
+        }
+    }
+    
+    protected function logIncomingCallback(array $callback): void
+    {
+        try {
+            TelegramMessage::create([
+                'telegram_id' => $callback['from']['id'] ?? null,
+                'chat_id'     => (string)($callback['message']['chat']['id'] ?? ''),
+                'direction'   => 'in',
+                'type'        => 'callback',
+                'message_id'  => $callback['message']['message_id'] ?? null,
+                'text'        => $callback['data'] ?? null,
+                'payload'     => $callback,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('TG logIncomingCallback error: ' . $e->getMessage());
+        }
     }
     
     /* ================== UI / БИЗНЕС-ЛОГИКА ================== */
