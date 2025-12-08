@@ -995,7 +995,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         
         $this->sendMessage(
             $chatId,
-            "",
+            "Меню на клавиатуре снизу 👇",
             $replyKeyboard
         );
     }
