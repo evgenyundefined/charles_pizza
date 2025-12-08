@@ -402,37 +402,42 @@ class TelegramBotController extends Controller
             $slotId = (int)substr($data, 5);
             
             $slot = Slot::query()->find($slotId);
-            if ($slot && $slot->booked_by) {
-                $timeLabel = $slot->slot_time->format('H:i');
-                $dateLabel = $slot->slot_time->format('d.m.Y');
-                
-                $this->sendMessage(
-                    $slot->booked_by,
-                    "🍕 Ваша пицца на {$dateLabel} {$timeLabel} готова!\n" .
-                    "Забирайте, пока горячая 🔥"
-                );
-                
-                $date = today();
-                
+            if (!$slot) {
+                $this->sendMessage($chatId, 'Слот не найден.');
+                [$text, $replyMarkup] = $this->buildAdminSlotsView(); // сегодня
             } else {
-                $date = today();
+                // Отметим как выполненный
+                $slot->is_completed = true;
+                $slot->save();
+                
+                // Дата слота для перерисовки списка
+                $date = $slot->slot_time->copy()->startOfDay();
+                
+                // Уведомим пользователя, если он есть
+                if ($slot->booked_by) {
+                    $timeLabel = $slot->slot_time->format('H:i');
+                    $dateLabel = $slot->slot_time->format('d.m.Y');
+                    
+                    $this->sendMessage(
+                        $slot->booked_by,
+                        "🍕 Ваша пицца на {$dateLabel} {$timeLabel} готова!\n" .
+                        "Забирайте, пока горячая 🔥"
+                    );
+                }
+                
+                [$text, $replyMarkup] = $this->buildAdminSlotsView($date);
             }
             
-            
-            [$text, $replyMarkup] = $this->buildAdminSlotsView($date);
-            
-            if ($messageId) {
+            if ($messageId ?? null) {
                 $params = [
-                    'chat_id' => $chatId,
+                    'chat_id'    => $chatId,
                     'message_id' => $messageId,
-                    'text' => $text,
+                    'text'       => $text,
                     'parse_mode' => 'HTML',
                 ];
-                
                 if ($replyMarkup) {
                     $params['reply_markup'] = json_encode($replyMarkup, JSON_UNESCAPED_UNICODE);
                 }
-                
                 $this->tg('editMessageText', $params);
             } else {
                 if ($replyMarkup) {
