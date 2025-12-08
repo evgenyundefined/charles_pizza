@@ -2220,6 +2220,11 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
             $update
         );
     }
+    /**
+     * /admin_logs [telegram_id]
+     * Показывает последние 30 логов (входящие/исходящие).
+     * Если указан telegram_id — фильтруем только по нему.
+     */
     protected function adminLogs(int $chatId, ?string $arg = null): void
     {
         $telegramId = null;
@@ -2247,6 +2252,33 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
             return;
         }
         
+        // подтянем данные пользователей из таблицы telegram_users
+        $ids = $rows->pluck('telegram_id')->filter()->unique()->all();
+        
+        $userMap = [];
+        if (!empty($ids)) {
+            $users = \DB::table('telegram_users')
+                ->whereIn('telegram_id', $ids)
+                ->get(['telegram_id', 'username', 'first_name', 'last_name']);
+            
+            foreach ($users as $u) {
+                $name = trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? ''));
+                $username = $u->username ? '@' . ltrim($u->username, '@') : null;
+                
+                if ($username && $name) {
+                    $label = "{$username} ({$name})";
+                } elseif ($username) {
+                    $label = $username;
+                } elseif ($name) {
+                    $label = $name;
+                } else {
+                    $label = (string) $u->telegram_id;
+                }
+                
+                $userMap[$u->telegram_id] = $label;
+            }
+        }
+        
         $header = $telegramId
             ? "📜 Логи для пользователя {$telegramId} (последние 30):"
             : "📜 Последние 30 логов (входящие/исходящие):";
@@ -2255,24 +2287,29 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         
         foreach ($rows as $row) {
             /** @var \App\Models\TelegramMessage $row */
-            $ts   = $row->created_at
+            $ts = $row->created_at
                 ? $row->created_at->timezone(config('app.timezone'))->format('d.m H:i')
                 : '-';
-            $dirIcon = $row->direction === 'out' ? '➡️' : '⬅️';
-            $type    = $row->type ?: 'msg';
+            
+            $dirIcon = '';//$row->direction === 'out' ? ' ➡ ️' : ' ⬅️ ';
+            $type    = $row->type ?: 'message';
+            
+            $uid    = $row->telegram_id;
+            $label  = $uid ? ($userMap[$uid] ?? (string) $uid) : '-';
             
             $text = $row->text ?? '';
             $text = trim($text) === '' ? '(без текста)' : $text;
             
-            // аккуратно обрежем, чтобы не раздувать сообщение
             if (mb_strlen($text) > 120) {
                 $text = mb_substr($text, 0, 117) . '...';
             }
             
-            $lines[] = "{$ts} {$dirIcon} {$type}: {$text}";
+            // пример строки:
+            // 08.12 19:10 ⬅️ [@user (Имя Фамилия)] message: /start
+            $lines[] = "{$ts} {$dirIcon} [{$label}] {$type}: {$text}";
         }
         
-        // Telegram ограничение ~4096 символов, но 30 строк по 120 символов — ок
         $this->sendMessage($chatId, implode("\n", $lines));
     }
+    
 }
