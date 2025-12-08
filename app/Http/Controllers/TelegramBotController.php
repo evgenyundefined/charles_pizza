@@ -2111,7 +2111,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
     {
         $rows = TelegramUser::query()
             ->leftJoin('slots', 'slots.booked_by', '=', 'telegram_users.telegram_id')
-            ->selectRaw('telegram_users.telegram_id, telegram_users.display_name, COUNT(slots.id) as cnt')
+            ->selectRaw('telegram_users.*, COUNT(slots.id) as cnt')
             ->groupBy('telegram_users.telegram_id', 'telegram_users.display_name')
             ->orderByDesc('cnt')
             ->get();
@@ -2167,7 +2167,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
     protected function formatTelegramUserName($row): string
     {
         $parts = [];
-        if (is_null($row->username)) {
+        if (!is_null($row->username)) {
             $uname = '@' . ltrim($row->username, '@');
             return $uname;
         }
