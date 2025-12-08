@@ -49,26 +49,12 @@ return new class extends Migration
                 $table->timestamp('last_seen_at')->nullable()->after('last_chat_id');
             }
         });
-        
-        // отдельный блок индексов (чтобы не падало, если уже есть)
-        Schema::table('telegram_users', function (Blueprint $table) {
-            if (!Schema::hasColumn('telegram_users', 'username')) {
-                return;
-            }
-            
-            // индексы ставим по try/fail-safe: Laravel сам не проверяет наличие индекса,
-            // так что если их ещё нет — просто создадутся.
-            $table->index('username');
-            $table->index('phone');
-            $table->index('last_seen_at');
-        });
     }
     
     public function down(): void
     {
         Schema::table('telegram_users', function (Blueprint $table) {
             if (Schema::hasColumn('telegram_users', 'username')) {
-                $table->dropIndex(['username']);
                 $table->dropColumn('username');
             }
             if (Schema::hasColumn('telegram_users', 'first_name')) {
@@ -78,7 +64,6 @@ return new class extends Migration
                 $table->dropColumn('last_name');
             }
             if (Schema::hasColumn('telegram_users', 'phone')) {
-                $table->dropIndex(['phone']);
                 $table->dropColumn('phone');
             }
             if (Schema::hasColumn('telegram_users', 'language_code')) {
@@ -94,7 +79,6 @@ return new class extends Migration
                 $table->dropColumn('last_chat_id');
             }
             if (Schema::hasColumn('telegram_users', 'last_seen_at')) {
-                $table->dropIndex(['last_seen_at']);
                 $table->dropColumn('last_seen_at');
             }
         });
