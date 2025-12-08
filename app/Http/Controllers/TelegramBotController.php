@@ -2292,7 +2292,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
                 : '-';
             
             $dirIcon = '';//$row->direction === 'out' ? ' ➡ ️' : ' ⬅️ ';
-            $type    = $row->type ?: '';
+            $type    = '';//$row->type ?: '';
             
             $uid    = $row->telegram_id;
             $label  = $uid ? ($userMap[$uid] ?? (string) $uid) : '-';
@@ -2306,7 +2306,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
             
             // пример строки:
             // 08.12 19:10 ⬅️ [@user (Имя Фамилия)] message: /start
-            $lines[] = "{$ts} {$dirIcon} [{$label}] {$type}: {$text}";
+            $lines[] = "{$ts} {$dirIcon} [{$label}] {$text}";
         }
         
         $this->sendMessage($chatId, implode("\n", $lines));
