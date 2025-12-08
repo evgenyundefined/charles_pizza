@@ -1797,11 +1797,11 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
                 // ещё не выполнен — показываем обе кнопки
                 $keyboard['inline_keyboard'][] = [
                     [
-                        'text' => "Выполнен {$username} {$time} ✅",
+                        'text' => "✅ {$username} {$time} ✅",
                         'callback_data' => 'done:' . $slot->id,
                     ],
                     [
-                        'text' => "Отменить {$username} {$time} ❌",
+                        'text' => "❌ {$username} {$time} ❌",
                         'callback_data' => 'admin_cancel:' . $slot->id,
                     ],
                 ];
