@@ -115,7 +115,8 @@ class TelegramBotController extends Controller
         $state = $this->loadState($userId);
         $adminChatId = (int)config('services.telegram.admin_chat_id');
         
-        $this->syncTelegramUser($message['from']);
+        
+        
         
         if ($state && ($state['step'] ?? null) === 'comment') {
             $comment = trim($text);
