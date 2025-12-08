@@ -2127,9 +2127,8 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         foreach ($rows as $row) {
             $label = $this->formatTelegramUserName($row);
             $count = (int) $row->cnt;
-            $word  = $this->pluralSlots($count);
             
-            $lines[] = "{$i}) {$label} ({$count} {$word})";
+            $lines[] = "{$i}) {$label} ({$count})";
             $i++;
         }
         
@@ -2156,9 +2155,8 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         foreach ($rows as $row) {
             $date = \Carbon\Carbon::parse($row->d)->format('d.m.Y');
             $count = (int) $row->cnt;
-            $word  = $this->pluralSlots($count); // уже есть метод, который мы добавляли
             
-            $lines[] = "{$date} — {$count} {$word}";
+            $lines[] = "{$date} — {$count} ";
         }
         
         $this->sendMessage($chatId, implode("\n", $lines));
@@ -2166,44 +2164,17 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
     /**
      * Слово "слот" в правильной форме.
      */
-    protected function pluralSlots(int $n): string
-    {
-        $n = abs($n) % 100;
-        $n1 = $n % 10;
-        
-        if ($n > 10 && $n < 20) {
-            return 'слотов';
-        }
-        if ($n1 > 1 && $n1 < 5) {
-            return 'слота';
-        }
-        if ($n1 == 1) {
-            return 'слот';
-        }
-        
-        return 'слотов';
-    }
     protected function formatTelegramUserName($row): string
     {
         $parts = [];
-        if (!empty($row->username)) {
+        if (is_null($row->username)) {
             $uname = '@' . ltrim($row->username, '@');
             return $uname;
         }
         // 1) display_name — главный
-        if (!empty($row->display_name)) {
-            $uname = '@' . ltrim($row->username, '@');
-            return $uname;
+        if (!is_null($row->display_name)) {
+            return $row->display_name;
         }
-        
-        // 2) username — @username
-        if (!empty($row->username)) {
-            $uname = '@' . ltrim($row->username, '@');
-            if (!in_array($uname, $parts, true)) {
-                $parts[] = $uname;
-            }
-        }
-        
         // 3) Имя + фамилия
         $fullName = trim(($row->first_name ?? '') . ' ' . ($row->last_name ?? ''));
         if ($fullName !== '') {
