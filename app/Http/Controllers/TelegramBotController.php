@@ -6,10 +6,9 @@ use App\Models\Slot;
 use App\Models\TelegramState;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Artisan;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
-
+use App\Models\TelegramUser;
 class TelegramBotController extends Controller
 {
     private const BTN_SHOW_SLOTS = 'Показать свободные слоты 🍕';
@@ -115,6 +114,8 @@ class TelegramBotController extends Controller
         $text = trim($message['text'] ?? '');
         $state = $this->loadState($userId);
         $adminChatId = (int)config('services.telegram.admin_chat_id');
+        
+        $this->syncTelegramUser($message['from']);
         
         if ($state && ($state['step'] ?? null) === 'comment') {
             $comment = trim($text);
@@ -2110,5 +2111,37 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         
         return 'слотов';
     }
-    
+    protected function syncTelegramUser(array $from): TelegramUser
+    {
+        $telegramId   = (int) ($from['id'] ?? 0);
+        $username     = $from['username']     ?? null;
+        $firstName    = $from['first_name']   ?? null;
+        $lastName     = $from['last_name']    ?? null;
+        $languageCode = $from['language_code'] ?? null;
+        $isBot        = (bool)($from['is_bot'] ?? false);
+        
+        // Собираем красивое имя
+        $rawName = trim(($firstName ?? '') . ' ' . ($lastName ?? ''));
+        if ($username) {
+            // если есть username — будем хранить его как display_name с @
+            $displayName = '@' . ltrim($username, '@');
+        } elseif ($rawName !== '') {
+            $displayName = $rawName;
+        } else {
+            $displayName = (string) $telegramId;
+        }
+        
+        return TelegramUser::updateOrCreate(
+            ['telegram_id' => $telegramId],
+            [
+                'username'      => $username,
+                'first_name'    => $firstName,
+                'last_name'     => $lastName,
+                'display_name'  => $displayName,
+                'language_code' => $languageCode,
+                'is_bot'        => $isBot,
+                'last_seen_at'  => now(),
+            ]
+        );
+    }
 }
