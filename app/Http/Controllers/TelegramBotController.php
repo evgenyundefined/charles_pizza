@@ -2125,11 +2125,11 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         
         $i = 1;
         foreach ($rows as $row) {
-            $name  = $row->display_name ?: (string) $row->telegram_id;
+            $label = $this->formatTelegramUserName($row);
             $count = (int) $row->cnt;
             $word  = $this->pluralSlots($count);
             
-            $lines[] = "{$i}) {$name} ({$count} {$word})";
+            $lines[] = "{$i}) {$label} ({$count} {$word})";
             $i++;
         }
         
@@ -2182,6 +2182,43 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         }
         
         return 'слотов';
+    }
+    protected function formatTelegramUserName($row): string
+    {
+        $parts = [];
+        
+        // 1) display_name — главный
+        if (!empty($row->display_name)) {
+            $parts[] = $row->display_name;
+        }
+        
+        // 2) username — @username
+        if (!empty($row->username)) {
+            $uname = '@' . ltrim($row->username, '@');
+            if (!in_array($uname, $parts, true)) {
+                $parts[] = $uname;
+            }
+        }
+        
+        // 3) Имя + фамилия
+        $fullName = trim(($row->first_name ?? '') . ' ' . ($row->last_name ?? ''));
+        if ($fullName !== '') {
+            if (!in_array($fullName, $parts, true)) {
+                $parts[] = $fullName;
+            }
+        }
+        
+        // 4) Телефон
+        if (!empty($row->phone)) {
+            $parts[] = $row->phone;
+        }
+        
+        // 5) Fallback — telegram_id
+        if (empty($parts)) {
+            $parts[] = (string) $row->telegram_id;
+        }
+        
+        return implode(' | ', $parts);
     }
     protected function syncTelegramUser(array $from, int|string $chatId, ?string $phone = null): void
     {
