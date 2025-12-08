@@ -167,6 +167,20 @@ class TelegramBotController extends Controller
             $this->showMainMenu($chatId);
             return;
         }
+        if ($text === '/admin_logs') {
+            if ($chatId !== $adminChatId) {
+                $this->sendMessage($chatId, 'Эта команда только для владельца.');
+                return;
+            }
+            
+            // /admin_logs [telegram_id]
+            $parts = preg_split('/\s+/', $text, 2);
+            $arg   = $parts[1] ?? null;
+            
+            $this->adminLogs($chatId, $arg);
+            
+            return;
+        }
         if ($text === '/admin_users') {
             if ($chatId !== $adminChatId) {
                 $this->sendMessage($chatId, 'Эта команда только для владельца.');
@@ -2202,5 +2216,60 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
             ['telegram_id' => $telegramId],
             $update
         );
+    }
+    protected function adminLogs(int $chatId, ?string $arg = null): void
+    {
+        $telegramId = null;
+        
+        if ($arg !== null && trim($arg) !== '' && ctype_digit($arg)) {
+            $telegramId = (int) $arg;
+        }
+        
+        $query = TelegramMessage::query()
+            ->orderByDesc('id')
+            ->limit(30);
+        
+        if ($telegramId) {
+            $query->where('telegram_id', $telegramId);
+        }
+        
+        $rows = $query->get();
+        
+        if ($rows->isEmpty()) {
+            $msg = $telegramId
+                ? "Логи для пользователя {$telegramId} не найдены 📭"
+                : "Пока нет записанных логов 📭";
+            
+            $this->sendMessage($chatId, $msg);
+            return;
+        }
+        
+        $header = $telegramId
+            ? "📜 Логи для пользователя {$telegramId} (последние 30):"
+            : "📜 Последние 30 логов (входящие/исходящие):";
+        
+        $lines = [$header];
+        
+        foreach ($rows as $row) {
+            /** @var \App\Models\TelegramMessage $row */
+            $ts   = $row->created_at
+                ? $row->created_at->timezone(config('app.timezone'))->format('d.m H:i')
+                : '-';
+            $dirIcon = $row->direction === 'out' ? '➡️' : '⬅️';
+            $type    = $row->type ?: 'msg';
+            
+            $text = $row->text ?? '';
+            $text = trim($text) === '' ? '(без текста)' : $text;
+            
+            // аккуратно обрежем, чтобы не раздувать сообщение
+            if (mb_strlen($text) > 120) {
+                $text = mb_substr($text, 0, 117) . '...';
+            }
+            
+            $lines[] = "{$ts} {$dirIcon} {$type}: {$text}";
+        }
+        
+        // Telegram ограничение ~4096 символов, но 30 строк по 120 символов — ок
+        $this->sendMessage($chatId, implode("\n", $lines));
     }
 }
