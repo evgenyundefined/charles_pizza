@@ -253,6 +253,15 @@ class TelegramBotController extends Controller
             $this->showMyBookings($chatId, $userId, true); // только сегодня
             return;
         }
+        if ($text === '/admin_notify_new_slots') {
+            if ($chatId !== $adminChatId) {
+                $this->sendMessage($chatId, 'Эта команда только для владельца.');
+                return;
+            }
+            
+            $this->adminNotifyNewSlots($chatId);
+            return;
+        }
         if (str_starts_with($text, '/admin_notify')) {
             if ($chatId !== $adminChatId) {
                 $this->sendMessage($chatId, 'Эта команда только для владельца.');
@@ -277,15 +286,7 @@ class TelegramBotController extends Controller
             $this->adminNotifyCustom($chatId, $body);
             return;
         }
-        if (str_starts_with($text, '/admin_notify_new_slots')) {
-            if ($chatId !== $adminChatId) {
-                $this->sendMessage($chatId, 'Эта команда только для владельца.');
-                return;
-            }
-            
-            $this->adminNotifyNewSlots($chatId);
-            return;
-        }
+        
         if (str_starts_with($text, '/admin_slots')) {
             
             if ($chatId !== $adminChatId) {
