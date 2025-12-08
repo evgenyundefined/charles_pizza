@@ -2235,7 +2235,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         
         $query = TelegramMessage::query()
             ->orderByDesc('id')
-            ->limit(30);
+            ->limit(255);
         
         if ($telegramId) {
             $query->where('telegram_id', $telegramId);
@@ -2280,8 +2280,8 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         }
         
         $header = $telegramId
-            ? "📜 Логи для пользователя {$telegramId} (последние 30):"
-            : "📜 Последние 30 логов (входящие/исходящие):";
+            ? "📜 Логи для пользователя {$telegramId}:"
+            : "📜 Последние:";
         
         $lines = [$header];
         
