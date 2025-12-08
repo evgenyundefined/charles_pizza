@@ -411,6 +411,9 @@ class TelegramBotController extends Controller
                     "🍕 Ваша пицца на {$dateLabel} {$timeLabel} готова!\n" .
                     "Забирайте, пока горячая 🔥"
                 );
+                
+                $date = today();
+                
             } else {
                 $date = today();
             }
