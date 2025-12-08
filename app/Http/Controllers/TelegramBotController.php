@@ -115,7 +115,25 @@ class TelegramBotController extends Controller
         $state = $this->loadState($userId);
         $adminChatId = (int)config('services.telegram.admin_chat_id');
         
-        $this->syncTelegramUser($message['from']);
+        $username = $message['from']['username'] ?? trim(
+            ($message['from']['first_name'] ?? '') . ' ' . ($message['from']['last_name'] ?? '')
+        );
+        $text   = trim($message['text'] ?? '');
+        
+        // телефон, если пользователь отправил контакт
+        $phone = null;
+        if (!empty($message['contact'])) {
+            $contact = $message['contact'];
+            if (
+                isset($contact['phone_number']) &&
+                (!isset($contact['user_id']) || $contact['user_id'] == $userId)
+            ) {
+                $phone = $contact['phone_number'];
+            }
+        }
+        
+        // СИНХРОНИЗАЦИЯ пользователя
+        $this->syncTelegramUser($message, $chatId, $phone);
         
         if ($state && ($state['step'] ?? null) === 'comment') {
             $comment = trim($text);
@@ -381,7 +399,7 @@ class TelegramBotController extends Controller
         $messageId = $callback['message']['message_id'] ?? null;
         $adminChatId = (int)config('services.telegram.admin_chat_id');
         
-        $this->syncTelegramUser($callback['from']);
+        $this->syncTelegramUser($callback['from'] , $chatId, );
         
         if ($chatId && $this->isMaintenance() && $chatId !== $adminChatId) {
             $cbId = $callback['id'] ?? null;
@@ -2110,37 +2128,39 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         
         return 'слотов';
     }
-    protected function syncTelegramUser(array $from): TelegramUser
+    protected function syncTelegramUser(array $from, int|string $chatId, ?string $phone = null): void
     {
-        $telegramId   = (int) ($from['id'] ?? 0);
+        if (empty($from['id'])) {
+            return;
+        }
+        
+        $telegramId   = (int) $from['id'];
         $username     = $from['username']     ?? null;
         $firstName    = $from['first_name']   ?? null;
         $lastName     = $from['last_name']    ?? null;
         $languageCode = $from['language_code'] ?? null;
-        $isBot        = (bool)($from['is_bot'] ?? false);
+        $isPremium    = (bool) ($from['is_premium'] ?? false);
+        $isBot        = (bool) ($from['is_bot'] ?? false);
         
-        // Собираем красивое имя
-        $rawName = trim(($firstName ?? '') . ' ' . ($lastName ?? ''));
-        if ($username) {
-            // если есть username — будем хранить его как display_name с @
-            $displayName = '@' . ltrim($username, '@');
-        } elseif ($rawName !== '') {
-            $displayName = $rawName;
-        } else {
-            $displayName = (string) $telegramId;
+        // если телефон пришёл — всегда обновляем; если нет — не трогаем существующий
+        $update = [
+            'username'      => $username,
+            'first_name'    => $firstName,
+            'last_name'     => $lastName,
+            'language_code' => $languageCode,
+            'is_premium'    => $isPremium,
+            'is_bot'        => $isBot,
+            'last_chat_id'  => (string) $chatId,
+            'last_seen_at'  => now(),
+        ];
+        
+        if ($phone !== null) {
+            $update['phone'] = $phone;
         }
         
-        return TelegramUser::updateOrCreate(
+        TelegramUser::updateOrCreate(
             ['telegram_id' => $telegramId],
-            [
-                'username'      => $username,
-                'first_name'    => $firstName,
-                'last_name'     => $lastName,
-                'display_name'  => $displayName,
-                'language_code' => $languageCode,
-                'is_bot'        => $isBot,
-                'last_seen_at'  => now(),
-            ]
+            $update
         );
     }
 }
