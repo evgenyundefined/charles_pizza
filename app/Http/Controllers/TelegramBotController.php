@@ -2186,10 +2186,14 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
     protected function formatTelegramUserName($row): string
     {
         $parts = [];
-        
+        if (!empty($row->username)) {
+            $uname = '@' . ltrim($row->username, '@');
+            return $uname;
+        }
         // 1) display_name — главный
         if (!empty($row->display_name)) {
-            $parts[] = $row->display_name;
+            $uname = '@' . ltrim($row->username, '@');
+            return $uname;
         }
         
         // 2) username — @username
