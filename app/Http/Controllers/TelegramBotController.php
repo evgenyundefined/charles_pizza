@@ -115,8 +115,7 @@ class TelegramBotController extends Controller
         $state = $this->loadState($userId);
         $adminChatId = (int)config('services.telegram.admin_chat_id');
         
-        
-        
+        //$this->syncTelegramUser($message['from']);
         
         if ($state && ($state['step'] ?? null) === 'comment') {
             $comment = trim($text);
@@ -381,6 +380,8 @@ class TelegramBotController extends Controller
         $cbId = $callback['id'];
         $messageId = $callback['message']['message_id'] ?? null;
         $adminChatId = (int)config('services.telegram.admin_chat_id');
+        
+        //$this->syncTelegramUser($callback['from']);
         
         if ($chatId && $this->isMaintenance() && $chatId !== $adminChatId) {
             $cbId = $callback['id'] ?? null;
@@ -2032,39 +2033,33 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
      */
     protected function adminUsersList(int $chatId): void
     {
-        $rows = Slot::query()
-            ->whereNotNull('booked_by')
-            ->selectRaw('booked_by, MAX(booked_username) as name, COUNT(*) as cnt')
-            ->groupBy('booked_by')
+        $rows = TelegramUser::query()
+            ->leftJoin('slots', 'slots.booked_by', '=', 'telegram_users.telegram_id')
+            ->selectRaw('telegram_users.telegram_id, telegram_users.display_name, COUNT(slots.id) as cnt')
+            ->groupBy('telegram_users.telegram_id', 'telegram_users.display_name')
             ->orderByDesc('cnt')
             ->get();
         
         if ($rows->isEmpty()) {
-            $this->sendMessage($chatId, 'Пока ещё никто не бронировал 😴');
+            $this->sendMessage($chatId, 'Пока ещё никто не писал боту 😴');
             return;
         }
         
-        $lines = ["👥 Пользователи, которые бронировали пиццу:"];
+        $lines = ["👥 Пользователи бота:"];
         
         $i = 1;
         foreach ($rows as $row) {
-            $name = $row->name ?: (string) $row->booked_by;
-            
-            // Если это что-то вроде никнейма без пробелов и без @ — добавим @
-            $label = $name;
-            if (!str_starts_with((string) $label, '@') && !preg_match('/\s/u', (string) $label)) {
-                $label = '@' . $label;
-            }
-            
+            $name  = $row->display_name ?: (string) $row->telegram_id;
             $count = (int) $row->cnt;
             $word  = $this->pluralSlots($count);
             
-            $lines[] = "{$i}) {$label} ({$count} {$word})";
+            $lines[] = "{$i}) {$name} ({$count} {$word})";
             $i++;
         }
         
         $this->sendMessage($chatId, implode("\n", $lines));
     }
+    
     protected function adminStatistic(int $chatId): void
     {
         $rows = Slot::query()
