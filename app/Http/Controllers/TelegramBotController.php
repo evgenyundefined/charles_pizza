@@ -2292,7 +2292,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
                 : '-';
             
             $dirIcon = '';//$row->direction === 'out' ? ' ➡ ️' : ' ⬅️ ';
-            $type    = $row->type ?: 'message';
+            $type    = $row->type ?: '';
             
             $uid    = $row->telegram_id;
             $label  = $uid ? ($userMap[$uid] ?? (string) $uid) : '-';
