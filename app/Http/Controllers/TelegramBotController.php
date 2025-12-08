@@ -2246,7 +2246,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         
         $query = TelegramMessage::query()
             ->orderByDesc('id')
-            ->limit(255);
+            ->limit(30);
         
         if ($telegramId) {
             $query->where('telegram_id', $telegramId);
