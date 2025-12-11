@@ -144,7 +144,7 @@ class TelegramBotController extends Controller
         }
         $this->logIncomingMessage($message);
         // СИНХРОНИЗАЦИЯ пользователя
-        $telegramUser = $this->syncTelegramUser($message, $chatId, $phone);
+        $telegramUser = $this->syncTelegramUser($message['from'], $chatId, $phone);
         $locale = $telegramUser->language ?? 'ru';
         
         if ($state && ($state['step'] ?? null) === 'comment') {
@@ -2033,8 +2033,7 @@ class TelegramBotController extends Controller
         
         if ($freeCount === 0) {
             $this->sendMessage(
-                $chatId,
-                "На сегодня свободных слотов нет — рассылать нечего 😴"
+                $chatId,$this->t('no_free_slots')
             );
             return;
         }
@@ -2273,12 +2272,8 @@ class TelegramBotController extends Controller
     }
     protected function syncTelegramUser(array $from, int|string $chatId, ?string $phone = null)
     {
-        if (empty($from['id'])) {
-            return;
-        }
-        
-        $telegramId   = (int) $from['id'];
-        $username     = $from['username']     ?? null;
+        $telegramId   = (int)  $from['id'];
+        $username     = $from['username'] ?? null;
         $firstName    = $from['first_name']   ?? null;
         $lastName     = $from['last_name']    ?? null;
         $languageCode = $from['language_code'] ?? null;
