@@ -2273,6 +2273,10 @@ class TelegramBotController extends Controller
     }
     protected function syncTelegramUser(array $from, int|string $chatId, ?string $phone = null): TelegramUser
     {
+        if (empty($from['id'])) {
+            return;
+        }
+        
         $telegramId   = (int) $from['id'];
         $username     = $from['username']     ?? null;
         $firstName    = $from['first_name']   ?? null;
