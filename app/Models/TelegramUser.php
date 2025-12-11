@@ -16,6 +16,7 @@ class TelegramUser extends Model
         'last_name',
         'display_name',
         'language_code',
+        'language',
         'is_bot',
         'last_seen_at',
     ];

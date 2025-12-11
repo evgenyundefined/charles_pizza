@@ -11,7 +11,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
 use App\Models\TelegramUser;
 use Illuminate\Support\Facades\Log;
-
+use Illuminate\Support\Facades\Lang;
 class TelegramBotController extends Controller
 {
     private const BTN_SHOW_SLOTS = 'Показать свободные слоты 🍕';
@@ -19,6 +19,14 @@ class TelegramBotController extends Controller
     private const BTN_ORDER_HISTORY = 'История заказов 📜';
     private const CACHE_MAINTENANCE_KEY = 'pizza_bot.maintenance';
     
+    protected array $supportedLanguages = ['ru', 'en'];
+    
+    protected function t(string $key, array $replace = [], ?string $locale = null): string
+    {
+        $locale = $locale ?: config('app.locale', 'ru');
+        
+        return Lang::get("telegram.$key", $replace, $locale);
+    }
     public function webhook(Request $request)
     {
         $update = $request->all();
@@ -136,7 +144,8 @@ class TelegramBotController extends Controller
         }
         $this->logIncomingMessage($message);
         // СИНХРОНИЗАЦИЯ пользователя
-        $this->syncTelegramUser($message, $chatId, $phone);
+        $telegramUser = $this->syncTelegramUser($message, $chatId, $phone);
+        $locale = $telegramUser->language ?? 'ru';
         
         if ($state && ($state['step'] ?? null) === 'comment') {
             $comment = trim($text);
@@ -164,7 +173,7 @@ class TelegramBotController extends Controller
         }
         if ($text === '/start') {
             $this->clearState($userId);
-            $this->showMainMenu($chatId);
+            $this->showMainMenu($chatId , $locale);
             return;
         }
         if ($text === '/admin_logs') {
@@ -237,20 +246,24 @@ class TelegramBotController extends Controller
             $this->sendMessage($chatId, $help);
             return;
         }
-        if ($text === self::BTN_MY_ORDERS) {
-            $this->showMyBookings($chatId, $userId, false);
+        $btnShowSlots   = $this->t('btn_show_slots', [], $locale);
+        $btnHistory     = $this->t('btn_orders_history', [], $locale);
+        $btnChangeLang  = $this->t('btn_change_language', [], $locale);
+        
+        if ($text === $btnShowSlots) {
+            $this->showFreeSlotsMenu($chatId, $userId, $locale);
             return;
         }
-        if ($text === self::BTN_ORDER_HISTORY) {
-            $this->showMyBookings($chatId, $userId, false);
+        if ($text === $btnHistory) {
+            $this->showMyBookings($chatId, $userId, false, $locale);
             return;
         }
-        if ($text === self::BTN_SHOW_SLOTS) {
-            $this->showFreeSlotsMenu($chatId, $userId);
+        if ($text === $btnChangeLang) {
+            $this->showLanguageChooser($chatId, $userId, $locale);
             return;
         }
         if ($text === '/cancel' || $text === '/cancel_booking') {
-            $this->showMyBookings($chatId, $userId, true); // только сегодня
+            $this->showMyBookings($chatId, $userId, true, $locale); // только сегодня
             return;
         }
         if ($text === '/admin_notify_new_slots') {
@@ -421,8 +434,8 @@ class TelegramBotController extends Controller
         $adminChatId = (int)config('services.telegram.admin_chat_id');
         
         $this->logIncomingCallback($callback);
-        $this->syncTelegramUser($callback['from'] , $chatId, );
-        
+        $telegramUser = $this->syncTelegramUser($callback['from'] , $chatId);
+        $locale = $telegramUser->language ?? 'ru';
         if ($chatId && $this->isMaintenance() && $chatId !== $adminChatId) {
             $cbId = $callback['id'] ?? null;
             if ($cbId) {
@@ -573,7 +586,7 @@ class TelegramBotController extends Controller
                 "🚫 Отмена брони:\n[{$timeLabel} {$label}]"
             );
             
-            [$text, $replyMarkup] = $this->buildMyBookingsView($userId, true);
+            [$text, $replyMarkup] = $this->buildMyBookingsView($userId, true , $locale);
             
             if ($messageId ?? null) {
                 $params = [
@@ -664,6 +677,35 @@ class TelegramBotController extends Controller
                 }
             }
             
+            return;
+        }
+        if ($data === 'change_lang') {
+            $this->showLanguageChooser($chatId, $userId, $locale);
+            return;
+        }
+        
+        if (str_starts_with($data, 'set_lang:')) {
+            $lang = substr($data, strlen('set_lang:'));
+            
+            if (!in_array($lang, $this->supportedLanguages, true)) {
+                $this->answerCallback($cbId, 'Unsupported language');
+                return;
+            }
+            
+            $telegramUser->language = $lang;
+            $telegramUser->save();
+            
+            $this->sendMessage(
+                $chatId,
+                $this->t('language_set', [
+                    'lang' => $lang === 'ru'
+                        ? $this->t('lang_ru_label', [], $lang)
+                        : $this->t('lang_en_label', [], $lang),
+                ], $lang)
+            );
+            
+            // Показать меню уже на новом языке
+            $this->showMainMenu($chatId, $lang);
             return;
         }
         if ($data === 'cancel_choose_date') {
@@ -770,8 +812,8 @@ class TelegramBotController extends Controller
         }
         if ($data === 'cancel') {
             $this->clearState($userId);
-            $this->sendMessage($chatId, 'Бронь отменена ❌');
-            $this->showMainMenu($chatId);
+            $this->sendMessage($chatId, $this->t('telegram.'));
+            $this->showMainMenu($chatId, $locale);
             return;
         }
         if ($data === 'confirm1') {
@@ -895,18 +937,19 @@ class TelegramBotController extends Controller
                 $username,
                 $dataState,
                 $messageIdFromState,
-                null
+                null,
+                locale: $locale
             );
             
             $this->clearState($userId);
             return;
         }
         if ($data === 'my_today') {
-            $this->showMyBookings($chatId, $userId, false);
+            $this->showMyBookings($chatId, $userId, false, $locale);
             return;
         }
         if ($data === 'my_history') {
-            $this->showMyBookings($chatId, $userId, false);
+            $this->showMyBookings($chatId, $userId, false, $locale);
             return;
         }
         if ($data === 'menu_show_slots') {
@@ -954,25 +997,26 @@ class TelegramBotController extends Controller
     
     /* ================== UI / БИЗНЕС-ЛОГИКА ================== */
     
-    protected function showMainMenu($chatId): void
+    protected function showMainMenu($chatId, ?string $locale = null): void
     {
-        $text = "Привет! Готовим Пепперони с перчинкой! \n
-Острая, сочная, с тем самым хрустящим бортиком — для тех, кто любит жар 🔥 \n
-Максимальная бронь — до 5 пицц.  \n
-Время выдачи — по последнему доступному слоту брони.  \n
-📍 Точка выдачи:  \n
-Будва, крытая парковка у кафе ТАБУ  \n
-(локация по клику)  \n
-https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
+        $locale = $locale ?: config('app.locale', 'ru');
+        
+        $text = $this->t('main_menu_text', [], $locale);
+        
+        $btnShowSlots     = $this->t('btn_show_slots', [], $locale);
+        $btnHistory       = $this->t('btn_orders_history', [], $locale);
+        $btnChangeLang    = $this->t('btn_change_language', [], $locale);
         
         $inlineKeyboard = [
             'inline_keyboard' => [
                 [
-                    ['text' => self::BTN_SHOW_SLOTS, 'callback_data' => 'menu_show_slots'],
+                    ['text' => $btnShowSlots,   'callback_data' => 'menu_show_slots'],
                 ],
                 [
-                    //['text' => self::BTN_MY_ORDERS,     'callback_data' => 'my_today'],
-                    ['text' => self::BTN_ORDER_HISTORY, 'callback_data' => 'my_history'],
+                    ['text' => $btnHistory,     'callback_data' => 'my_history'],
+                ],
+                [
+                    ['text' => $btnChangeLang,  'callback_data' => 'change_lang'],
                 ],
             ],
         ];
@@ -982,23 +1026,26 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         $replyKeyboard = [
             'keyboard' => [
                 [
-                    ['text' => self::BTN_SHOW_SLOTS],
+                    ['text' => $btnShowSlots],
                 ],
                 [
-                    //['text' => self::BTN_MY_ORDERS],
-                    ['text' => self::BTN_ORDER_HISTORY],
+                    ['text' => $btnHistory],
+                ],
+                [
+                    ['text' => $btnChangeLang],
                 ],
             ],
-            'resize_keyboard' => true,
+            'resize_keyboard'   => true,
             'one_time_keyboard' => false,
         ];
         
         $this->sendMessage(
             $chatId,
-            "Меню на клавиатуре снизу 👇",
+            $this->t('main_menu_keyboard_hint', [], $locale),
             $replyKeyboard
         );
     }
+    
     
     protected function showAdminAllActiveSlots(int $chatId): void
     {
@@ -1089,11 +1136,11 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         $this->sendMessage($chatId, implode("\n", $lines), $replyMarkup);
     }
     
-    protected function showFreeSlotsMenu(int $chatId, int $userId): void
+    protected function showFreeSlotsMenu(int $chatId, int $userId, ?string $locale = null): void
     {
+        $locale = $locale ?: 'ru';
         $now = now();
         
-        // Берём все свободные будущие слоты
         $slots = Slot::query()
             ->where('slot_time', '>', $now)
             ->whereNull('booked_by')
@@ -1102,7 +1149,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
             ->get(['slot_time']);
         
         if ($slots->isEmpty()) {
-            $this->sendMessage($chatId, 'Свободных слотов пока нет 😔 Попробуйте позже.');
+            $this->sendMessage($chatId, $this->t('no_free_slots', [], $locale));
             return;
         }
         
@@ -1254,7 +1301,8 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         string $username,
         array $data,
         ?int $messageId = null,
-        ?string $comment = null
+        ?string $comment = null,
+        ?string $locale = 'ru'
     ): void
     {
         $slots = $data['slots'] ?? [];
@@ -1327,7 +1375,10 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
             $chosen
         );
         
-        $text = 'Готово! 🎉 За вами слоты: ' . implode(', ', $times) . " 🍕";
+        $timesStr = implode(', ', $times);
+        $text = $this->t('booking_done', ['times' => $timesStr], $locale);
+        
+        //$text = 'Готово! 🎉 За вами слоты: ' . implode(', ', $times) . " 🍕";
         
         $inlineKeyboard = [
             'inline_keyboard' => [
@@ -1369,7 +1420,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         
         $this->sendMessage($adminId, $adminText);
     }
-    protected function buildMyBookingsView(int $userId, bool $todayOnly = false): array
+    protected function buildMyBookingsView(int $userId, bool $todayOnly = false , ?string $locale = 'ru'): array
     {
         $query = Slot::query()
             ->where('booked_by', $userId);
@@ -1384,16 +1435,16 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         
         if ($slots->isEmpty()) {
             $msg = $todayOnly
-                ? 'На сегодня у вас нет броней 😴'
-                : 'У вас пока нет броней 😴';
+                ? $this->t('no_bookings_today', [], $locale)
+                : $this->t('no_bookings_any', [], $locale);
             
             return [$msg, null];
         }
         
         $lines = [
             $todayOnly
-                ? '🧾 Ваши брони на сегодня:'
-                : '🧾 Ваши брони:',
+                ? $this->t('my_bookings_today', [], $locale)
+                : $this->t('my_bookings_all', [], $locale),
         ];
         
         $currentDate = null;
@@ -1447,9 +1498,9 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         
         return [implode("\n", $lines), $keyboard];
     }
-    protected function showMyBookings($chatId, int $userId, bool $todayOnly = false): void
+    protected function showMyBookings($chatId, int $userId, bool $todayOnly = false , ?string $locale = 'ru'): void
     {
-        [$text, $replyMarkup] = $this->buildMyBookingsView($userId, $todayOnly);
+        [$text, $replyMarkup] = $this->buildMyBookingsView($userId, $todayOnly , $locale);
         
         if ($replyMarkup) {
             $this->sendMessage($chatId, $text, $replyMarkup);
@@ -1481,6 +1532,30 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
             $this->sendMessage($chatId, $text);
         }
     }
+    protected function showLanguageChooser(int $chatId, int $userId, string $locale): void
+    {
+        $text = $this->t('choose_language', [], $locale);
+        
+        $keyboard = [
+            'inline_keyboard' => [
+                [
+                    [
+                        'text'          => $this->t('lang_ru_label', [], 'ru'),
+                        'callback_data' => 'set_lang:ru',
+                    ],
+                ],
+                [
+                    [
+                        'text'          => $this->t('lang_en_label', [], 'en'),
+                        'callback_data' => 'set_lang:en',
+                    ],
+                ],
+            ],
+        ];
+        
+        $this->sendMessage($chatId, $text, $keyboard);
+    }
+    
     protected function showAdminAvailableSlots(int $chatId, ?string $dateStr = null): void
     {
         $now = now();
@@ -2196,12 +2271,8 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         
         return implode(' | ', $parts);
     }
-    protected function syncTelegramUser(array $from, int|string $chatId, ?string $phone = null): void
+    protected function syncTelegramUser(array $from, int|string $chatId, ?string $phone = null): TelegramUser
     {
-        if (empty($from['id'])) {
-            return;
-        }
-        
         $telegramId   = (int) $from['id'];
         $username     = $from['username']     ?? null;
         $firstName    = $from['first_name']   ?? null;
@@ -2216,6 +2287,7 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
             'first_name'    => $firstName,
             'last_name'     => $lastName,
             'language_code' => $languageCode,
+            'language'      => $languageCode,
             'is_premium'    => $isPremium,
             'is_bot'        => $isBot,
             'last_chat_id'  => (string) $chatId,
@@ -2225,11 +2297,16 @@ https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n";
         if ($phone !== null) {
             $update['phone'] = $phone;
         }
-        
-        TelegramUser::updateOrCreate(
+        $user = TelegramUser::updateOrCreate(
             ['telegram_id' => $telegramId],
             $update
         );
+        
+        if (!$user->language) {
+            $user->language = 'ru';
+            $user->save();
+        }
+        return $user;
     }
     /**
      * /admin_logs [telegram_id]
