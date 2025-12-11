@@ -2286,7 +2286,7 @@ class TelegramBotController extends Controller
             'first_name'    => $firstName,
             'last_name'     => $lastName,
             'language_code' => $languageCode,
-            'language'      => $languageCode,
+            //'language'      => $languageCode,
             'is_premium'    => $isPremium,
             'is_bot'        => $isBot,
             'last_chat_id'  => (string) $chatId,
