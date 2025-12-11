@@ -2271,7 +2271,7 @@ class TelegramBotController extends Controller
         
         return implode(' | ', $parts);
     }
-    protected function syncTelegramUser(array $from, int|string $chatId, ?string $phone = null): TelegramUser
+    protected function syncTelegramUser(array $from, int|string $chatId, ?string $phone = null)
     {
         if (empty($from['id'])) {
             return;
