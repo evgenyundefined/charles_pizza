@@ -1108,11 +1108,11 @@ class TelegramBotController extends Controller
                     ['text' => $btnHistory,     'callback_data' => 'my_history'],
                 ],
                 [
-                    ['text' => $btnChangeLang,  'callback_data' => 'change_lang'],
-                ],
-                [
                     ['text' => self::BTN_LEAVE_REVIEW, 'callback_data' => 'leave_review'],
                     ['text' => self::BTN_REVIEWS,      'callback_data' => 'show_reviews'],
+                ],
+                [
+                    ['text' => $btnChangeLang,  'callback_data' => 'change_lang'],
                 ],
             ],
         ];
@@ -1126,6 +1126,10 @@ class TelegramBotController extends Controller
                 ],
                 [
                     ['text' => $btnHistory],
+                ],
+                [
+                    ['text' => self::BTN_LEAVE_REVIEW, 'callback_data' => 'leave_review'],
+                    ['text' => self::BTN_REVIEWS,      'callback_data' => 'show_reviews'],
                 ],
                 [
                     ['text' => $btnChangeLang],
