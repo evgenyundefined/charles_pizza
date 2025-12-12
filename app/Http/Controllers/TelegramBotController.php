@@ -18,7 +18,8 @@ class TelegramBotController extends Controller
     private const BTN_MY_ORDERS = 'Мои заказы 📦';
     private const BTN_ORDER_HISTORY = 'История заказов 📜';
     private const CACHE_MAINTENANCE_KEY = 'pizza_bot.maintenance';
-    
+    private const BTN_LEAVE_REVIEW = 'Оставить отзыв ⭐';
+    private const BTN_REVIEWS      = 'Отзывы ⭐';
     protected array $supportedLanguages = ['ru', 'en'];
     
     protected function t(string $key, array $replace = [], ?string $locale = null): string
@@ -146,6 +147,80 @@ class TelegramBotController extends Controller
         // СИНХРОНИЗАЦИЯ пользователя
         $telegramUser = $this->syncTelegramUser($message['from'], $chatId, $phone);
         $locale = $telegramUser->language ?? 'ru';
+        if ($state && ($state['step'] ?? null) === 'review') {
+            $reviewText = trim($text);
+            
+            if ($reviewText === '') {
+                $this->sendMessage(
+                    $chatId,
+                    "Отзыв пустой 🤔\nНапишите пару слов — нам правда важно ваше мнение."
+                );
+                return;
+            }
+            
+            $data   = $state['data'] ?? [];
+            $slotId = $data['slot_id'] ?? null;
+            
+            if (!$slotId) {
+                $this->clearState($userId);
+                $this->sendMessage($chatId, 'Не удалось найти заказ для отзыва, попробуйте ещё раз позже.');
+                return;
+            }
+            
+            /** @var \App\Models\Slot|null $slot */
+            $slot = Slot::query()
+                ->where('id', $slotId)
+                ->where('booked_by', $userId)
+                ->where('is_completed', true)
+                ->first();
+            
+            if (!$slot) {
+                $this->clearState($userId);
+                $this->sendMessage($chatId, 'Не удалось найти завершённый заказ для отзыва.');
+                return;
+            }
+            
+            // Попробуем вытащить оценку 1–5 в начале строки
+            $rating = null;
+            if (preg_match('/^\s*([1-5])\s*[—-]?\s*(.*)$/u', $reviewText, $m)) {
+                $rating     = (int) $m[1];
+                $rest       = trim($m[2]);
+                if ($rest !== '') {
+                    $reviewText = $rest;
+                }
+            }
+            
+            $slot->review_text   = $reviewText;
+            $slot->review_rating = $rating;
+            $slot->reviewed_at   = now();
+            $slot->save();
+            
+            $this->clearState($userId);
+            
+            $this->sendMessage(
+                $chatId,
+                "Спасибо за отзыв! ⭐\n" .
+                "Нам очень важно ваше мнение 💛"
+            );
+            
+            // Уведомим админа
+            $adminChatId = (int) config('services.telegram.admin_chat_id');
+            if ($adminChatId) {
+                $timeLabel = $slot->slot_time->format('d.m.Y H:i');
+                $userLabel = $slot->booked_username ?: $userId;
+                
+                $ratingLine = $rating ? "Оценка: {$rating}⭐\n" : '';
+                
+                $this->sendMessage(
+                    $adminChatId,
+                    "⭐ Новый отзыв:\n[{$timeLabel} {$userLabel}]\n" .
+                    $ratingLine .
+                    $reviewText
+                );
+            }
+            
+            return;
+        }
         
         if ($state && ($state['step'] ?? null) === 'comment') {
             $comment = trim($text);
@@ -403,6 +478,15 @@ class TelegramBotController extends Controller
                 );
             }
             
+            return;
+        }
+        if ($text === self::BTN_LEAVE_REVIEW || $text === '/review') {
+            $this->startReviewFlow($chatId, $userId);
+            return;
+        }
+        
+        if ($text === self::BTN_REVIEWS || $text === '/reviews') {
+            $this->showReviews($chatId);
             return;
         }
         
@@ -956,7 +1040,15 @@ class TelegramBotController extends Controller
             $this->showFreeSlotsMenu($chatId, $userId);
             return;
         }
+        if ($data === 'leave_review') {
+            $this->startReviewFlow($chatId, $userId);
+            return;
+        }
         
+        if ($data === 'show_reviews') {
+            $this->showReviews($chatId);
+            return;
+        }
     }
     
     /* ================== LOGGING ================== */
@@ -1017,6 +1109,10 @@ class TelegramBotController extends Controller
                 ],
                 [
                     ['text' => $btnChangeLang,  'callback_data' => 'change_lang'],
+                ],
+                [
+                    ['text' => self::BTN_LEAVE_REVIEW, 'callback_data' => 'leave_review'],
+                    ['text' => self::BTN_REVIEWS,      'callback_data' => 'show_reviews'],
                 ],
             ],
         ];
@@ -2394,6 +2490,89 @@ class TelegramBotController extends Controller
             // пример строки:
             // 08.12 19:10 ⬅️ [@user (Имя Фамилия)] message: /start
             $lines[] = "{$ts} {$dirIcon} [{$label}] {$text}";
+        }
+        
+        $this->sendMessage($chatId, implode("\n", $lines));
+    }
+    protected function startReviewFlow(int $chatId, int $userId): void
+    {
+        /** @var \App\Models\Slot|null $slot */
+        $slot = Slot::query()
+            ->where('booked_by', $userId)
+            ->where('is_completed', true)
+            ->whereNull('review_text')
+            ->where('slot_time', '<', now())      // слот уже в прошлом
+            ->orderByDesc('slot_time')
+            ->first();
+        
+        if (!$slot) {
+            $this->sendMessage(
+                $chatId,
+                "У вас нет выполненных заказов без отзыва 😊\n" .
+                "Как только попробуете пиццу — нажмите «Оставить отзыв ⭐» или команду /review."
+            );
+            return;
+        }
+        
+        $timeLabel = $slot->slot_time->format('d.m.Y H:i');
+        
+        $this->saveState($userId, 'review', [
+            'slot_id' => $slot->id,
+        ]);
+        
+        $this->sendMessage(
+            $chatId,
+            "Оставим отзыв на заказ от {$timeLabel} 🍕\n\n" .
+            "Напишите, пожалуйста, одним сообщением:\n" .
+            "— понравилась ли пицца,\n" .
+            "— что можно улучшить.\n\n" .
+            "Можно начать с оценки от 1 до 5, например:\n" .
+            "«5 — всё супер» ⭐"
+        );
+    }
+    protected function showReviews(int $chatId): void
+    {
+        $reviews = Slot::query()
+            ->whereNotNull('review_text')
+            ->where('is_completed', true)
+            ->orderByDesc('slot_time')
+            ->limit(10)
+            ->get(['slot_time', 'review_text', 'booked_username', 'review_rating']);
+        
+        if ($reviews->isEmpty()) {
+            $this->sendMessage(
+                $chatId,
+                "Пока отзывов нет — вы можете стать первым! ⭐\n" .
+                "После заказа нажмите «Оставить отзыв ⭐»."
+            );
+            return;
+        }
+        
+        $lines = ["⭐ Несколько последних отзывов:"];
+        
+        foreach ($reviews as $slot) {
+            /** @var \App\Models\Slot $slot */
+            $date = $slot->slot_time->format('d.m');
+            $time = $slot->slot_time->format('H:i');
+            
+            $user = trim((string) $slot->booked_username);
+            $userLabel = $user !== '' ? $user : '';
+            
+            $review = trim($slot->review_text);
+            if (mb_strlen($review) > 250) {
+                $review = mb_substr($review, 0, 247) . '…';
+            }
+            
+            $rating = $slot->review_rating;
+            $ratingText = $rating ? " ({$rating}⭐)" : '';
+            
+            $lines[] = "";
+            $header = "📅 {$date} {$time}{$ratingText}";
+            if ($userLabel !== '') {
+                $header .= " — {$userLabel}";
+            }
+            $lines[] = $header;
+            $lines[] = "«{$review}»";
         }
         
         $this->sendMessage($chatId, implode("\n", $lines));
