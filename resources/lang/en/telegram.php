@@ -4,7 +4,11 @@ return [
     'btn_show_slots'      => 'Show available slots 🍕',
     'btn_orders_history'  => 'Order history 📜',
     'btn_change_language' => '🌐 Language',
+    'btn_order_history' => 'Order history 📜',
     
+    'btn_leave_review'  => 'Leave a review ⭐',
+    'btn_reviews'       => 'Reviews ⭐',
+    'btn_language'      => '🌐 Language',
     'main_menu_text' => "Hi! Tomorrow, 16.12 (Tuesday) we’ll turn the oven back on\n"
         . "and cook our “Chicken Barbecue” pizza 🍕\n\n"
         . "Tender chicken fillet in a mild BBQ sauce with a light smoky note,\n"
@@ -46,4 +50,5 @@ return [
     'language_set'       => 'Language changed to :lang 👌',
     'lang_ru_label'      => 'Русский',
     'lang_en_label'      => 'English',
+    
 ];

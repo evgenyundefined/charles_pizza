@@ -153,7 +153,7 @@ class TelegramBotController extends Controller
             if ($reviewText === '') {
                 $this->sendMessage(
                     $chatId,
-                    "Отзыв пустой 🤔\nНапишите пару слов — нам правда важно ваше мнение."
+                    "Отзыв пустой 🤔\nНапишите, пожалуйста, пару слов — это очень помогает нам."
                 );
                 return;
             }
@@ -162,62 +162,37 @@ class TelegramBotController extends Controller
             $slotId = $data['slot_id'] ?? null;
             
             if (!$slotId) {
+                // что-то пошло не так, сбрасываем состояние
                 $this->clearState($userId);
-                $this->sendMessage($chatId, 'Не удалось найти заказ для отзыва, попробуйте ещё раз позже.');
+                $this->sendMessage(
+                    $chatId,
+                    "Не удалось привязать отзыв к заказу. Попробуйте в следующий раз 🙏"
+                );
                 return;
             }
             
-            /** @var \App\Models\Slot|null $slot */
-            $slot = Slot::query()
-                ->where('id', $slotId)
-                ->where('booked_by', $userId)
-                ->where('is_completed', true)
-                ->first();
+            // тут либо сохраняем в таблицу отзывов, либо просто шлём админу
+            // пример с таблицей reviews:
             
-            if (!$slot) {
-                $this->clearState($userId);
-                $this->sendMessage($chatId, 'Не удалось найти завершённый заказ для отзыва.');
-                return;
-            }
+            \App\Models\Review::create([
+                'slot_id'      => $slotId,
+                'telegram_id'  => $userId,
+                'text'         => $reviewText,
+            ]);
             
-            // Попробуем вытащить оценку 1–5 в начале строки
-            $rating = null;
-            if (preg_match('/^\s*([1-5])\s*[—-]?\s*(.*)$/u', $reviewText, $m)) {
-                $rating     = (int) $m[1];
-                $rest       = trim($m[2]);
-                if ($rest !== '') {
-                    $reviewText = $rest;
-                }
-            }
-            
-            $slot->review_text   = $reviewText;
-            $slot->review_rating = $rating;
-            $slot->reviewed_at   = now();
-            $slot->save();
+            // уведомим админа
+            $adminChatId = (int) config('services.telegram.admin_chat_id');
+            $this->sendMessage(
+                $adminChatId,
+                "⭐ Новый отзыв:\n\n{$reviewText}"
+            );
             
             $this->clearState($userId);
             
             $this->sendMessage(
                 $chatId,
-                "Спасибо за отзыв! ⭐\n" .
-                "Нам очень важно ваше мнение 💛"
+                "Спасибо за отзыв! 🧡"
             );
-            
-            // Уведомим админа
-            $adminChatId = (int) config('services.telegram.admin_chat_id');
-            if ($adminChatId) {
-                $timeLabel = $slot->slot_time->format('d.m.Y H:i');
-                $userLabel = $slot->booked_username ?: $userId;
-                
-                $ratingLine = $rating ? "Оценка: {$rating}⭐\n" : '';
-                
-                $this->sendMessage(
-                    $adminChatId,
-                    "⭐ Новый отзыв:\n[{$timeLabel} {$userLabel}]\n" .
-                    $ratingLine .
-                    $reviewText
-                );
-            }
             
             return;
         }
