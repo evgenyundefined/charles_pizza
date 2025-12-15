@@ -538,16 +538,45 @@ class TelegramBotController extends Controller
                 // Дата слота для перерисовки списка
                 $date = $slot->slot_time->copy()->startOfDay();
                 
-                // Уведомим пользователя, если он есть
-                if ($slot->booked_by) {
+                if ($slot && $slot->booked_by) {
                     $timeLabel = $slot->slot_time->format('H:i');
                     $dateLabel = $slot->slot_time->format('d.m.Y');
                     
+                    // язык пользователя
+                    $userLocale = $this->getUserLocale($slot->booked_by);
+                    
+                    // локализованный текст "пицца готова"
+                    $text = trans(
+                        'telegram.order_ready',
+                        [
+                            'date' => $dateLabel,
+                            'time' => $timeLabel,
+                        ],
+                        $userLocale
+                    );
+                    
+                    // инлайн-кнопка "Оставить отзыв ⭐"
+                    $keyboard = [
+                        'inline_keyboard' => [
+                            [
+                                [
+                                    'text'          => trans('telegram.btn_leave_review', [], $userLocale),
+                                    'callback_data' => 'review_start:' . $slot->id,
+                                ],
+                            ],
+                        ],
+                    ];
+                    
                     $this->sendMessage(
                         $slot->booked_by,
-                        "🍕 Ваша пицца на {$dateLabel} {$timeLabel} готова!\n" .
-                        "Забирайте, пока горячая 🔥"
+                        $text,
+                        $keyboard
                     );
+                    
+                    // чтобы ниже buildAdminSlotsView работал по дате слота
+                    $date = $slot->slot_time->copy()->startOfDay();
+                } else {
+                    $date = today();
                 }
                 
                 [$text, $replyMarkup] = $this->buildAdminSlotsView($date);

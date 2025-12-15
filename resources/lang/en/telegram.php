@@ -3,29 +3,28 @@
 return [
     'btn_show_slots'      => 'Show available slots 🍕',
     'btn_orders_history'  => 'Order history 📜',
-    'btn_change_language' => '🌐 Language',
+    'btn_change_language' => 'Language 🌐',
     'btn_order_history' => 'Order history 📜',
     
     'btn_leave_review'  => 'Leave a review ⭐',
     'btn_reviews'       => 'Reviews ⭐',
-    'btn_language'      => '🌐 Language',
-    'main_menu_text' => "Hi! Tomorrow, 16.12 (Tuesday) we’ll turn the oven back on\n"
-        . "and cook our “Chicken Barbecue” pizza 🍕\n\n"
-        . "Tender chicken fillet in a mild BBQ sauce with a light smoky note,\n"
-        . "melting mozzarella and a thin crispy crust straight from the oven.\n"
-        . "It’s a warm, cozy, no-rush kind of pizza — just good food and good mood.\n\n"
-        . "🕰 Format\n"
-        . "• 1 time slot = 1 pizza\n"
-        . "• Maximum booking – up to 5 pizzas in a row\n"
-        . "• Pickup time – by the last booked slot\n\n"
-        . "💶 Donation – 7 €\n"
-        . "Diameter – 25 cm\n"
-        . "(this is not a sale, but a contribution that covers ingredients,\n"
-        . "the box and equipment work)\n\n"
-        . "📍 Pickup point\n"
-        . "Budva, covered parking between TABU café and Mega\n"
-        . "[tap for location]\n"
-        . "https://maps.app.goo.gl/sPGaRSRLdqUnehT6A",
+    'btn_language'      => 'Language 🌐',
+    'main_menu_text' => "16.12 (Tuesday) we’re firing up the oven again
+and making BBQ Chicken pizza 🍕
+
+🕰 Format
+• 1 time slot = 1 pizza
+• Maximum booking — up to 5 pizzas in a row
+• Pick-up time is based on your last booked slot
+
+💶 Donation — 7 €
+Diameter — 25 cm
+(this is not a sale, but a contribution that covers ingredients, box and equipment costs)
+
+📍 Pickup point
+Budva, covered parking between TABU café and Mega
+[tap for location]
+https://maps.app.goo.gl/sPGaRSRLdqUnehT6A",
     
     'main_menu_keyboard_hint' => 'Menu on the keyboard below 👇',
     
@@ -60,4 +59,7 @@ return [
     'reviews.thanks'              => "Thank you for your review! ⭐",
     'reviews.none_yet'            => "There are no reviews yet — you can be the first one! ⭐\nAfter your order, tap “Leave a review ⭐”.",
     'reviews.list_title'          => "📜 Latest reviews:",
+    
+    'order_ready'      => "🍕 Your pizza for :date at :time is ready!\nPick it up while it’s hot 🔥",
+    'btn_leave_review' => 'Leave a review ⭐',
 ];
