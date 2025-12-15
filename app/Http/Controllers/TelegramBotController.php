@@ -1142,7 +1142,6 @@ class TelegramBotController extends Controller
                     ['text' => $btnHistory,     'callback_data' => 'my_history'],
                 ],
                 [
-                    ['text' => self::BTN_LEAVE_REVIEW, 'callback_data' => 'leave_review'],
                     ['text' => self::BTN_REVIEWS,      'callback_data' => 'show_reviews'],
                 ],
                 [
