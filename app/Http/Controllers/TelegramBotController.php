@@ -151,6 +151,7 @@ class TelegramBotController extends Controller
         $btnShowSlots   = $this->t('btn_show_slots', [], $locale);
         $btnHistory     = $this->t('btn_orders_history', [], $locale);
         $btnChangeLang  = $this->t('btn_change_language', [], $locale);
+        $btnReviews     = $this->t('btn_reviews', [], $locale);
         
         if ($state && ($state['step'] ?? null) === 'review') {
             $reviewText = trim($text);
@@ -318,6 +319,10 @@ class TelegramBotController extends Controller
         }
         if ($text === $btnChangeLang) {
             $this->showLanguageChooser($chatId, $userId, $locale);
+            return;
+        }
+        if ($text === $btnReviews) {
+            $this->showReviews($chatId);
             return;
         }
         if ($text === '/cancel' || $text === '/cancel_booking') {
