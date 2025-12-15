@@ -147,56 +147,67 @@ class TelegramBotController extends Controller
         // СИНХРОНИЗАЦИЯ пользователя
         $telegramUser = $this->syncTelegramUser($message['from'], $chatId, $phone);
         $locale = $telegramUser->language ?? 'ru';
+        
+        $btnShowSlots   = $this->t('btn_show_slots', [], $locale);
+        $btnHistory     = $this->t('btn_orders_history', [], $locale);
+        $btnChangeLang  = $this->t('btn_change_language', [], $locale);
+        
         if ($state && ($state['step'] ?? null) === 'review') {
             $reviewText = trim($text);
             
             if ($reviewText === '') {
                 $this->sendMessage(
                     $chatId,
-                    "Отзыв пустой 🤔\nНапишите, пожалуйста, пару слов — это очень помогает нам."
+                    $this->tForUser($userId, 'telegram.reviews.ask_text')
                 );
                 return;
             }
             
-            $data   = $state['data'] ?? [];
-            $slotId = $data['slot_id'] ?? null;
+            $slotId = $state['data']['slot_id'] ?? null;
             
             if (!$slotId) {
-                // что-то пошло не так, сбрасываем состояние
                 $this->clearState($userId);
-                $this->sendMessage(
-                    $chatId,
-                    "Не удалось привязать отзыв к заказу. Попробуйте в следующий раз 🙏"
-                );
+                $this->sendMessage($chatId, 'Не удалось определить заказ для отзыва 🤔');
                 return;
             }
             
-            // тут либо сохраняем в таблицу отзывов, либо просто шлём админу
-            // пример с таблицей reviews:
+            /** @var \App\Models\Slot|null $slot */
+            $slot = Slot::query()
+                ->where('id', $slotId)
+                ->where('booked_by', $userId)    // подстраховка — отзыв только к своему заказу
+                ->first();
             
-            \App\Models\Review::create([
-                'slot_id'      => $slotId,
-                'telegram_id'  => $userId,
-                'text'         => $reviewText,
-            ]);
-            
-            // уведомим админа
-            $adminChatId = (int) config('services.telegram.admin_chat_id');
-            $this->sendMessage(
-                $adminChatId,
-                "⭐ Новый отзыв:\n\n{$reviewText}"
-            );
+            if (!$slot) {
+                $this->clearState($userId);
+                $this->sendMessage($chatId, 'Не нашёл ваш заказ для отзыва 🙈');
+                return;
+            }
+
+// сохраняем отзыв прямо в slots
+            $slot->review_text   = $reviewText;
+            $slot->review_rating = null;     // если рейтинг пока не используем
+            $slot->reviewed_at   = now();
+            $slot->save();
             
             $this->clearState($userId);
-            
+
+// спасибо пользователю
             $this->sendMessage(
                 $chatId,
-                "Спасибо за отзыв! 🧡"
+                $this->tForUser($userId, 'telegram.reviews.thanks')
+            );
+
+// опционально уведомляем админа
+            $adminChatId = (int) config('services.telegram.admin_chat_id');
+            $timeLabel   = $slot->slot_time->format('d.m.Y H:i');
+            
+            $this->sendMessage(
+                $adminChatId,
+                "⭐ Новый отзыв за слот {$timeLabel} от {$userId}:\n\n{$reviewText}"
             );
             
             return;
         }
-        
         if ($state && ($state['step'] ?? null) === 'comment') {
             $comment = trim($text);
             
@@ -296,10 +307,7 @@ class TelegramBotController extends Controller
             $this->sendMessage($chatId, $help);
             return;
         }
-        $btnShowSlots   = $this->t('btn_show_slots', [], $locale);
-        $btnHistory     = $this->t('btn_orders_history', [], $locale);
-        $btnChangeLang  = $this->t('btn_change_language', [], $locale);
-        
+
         if ($text === $btnShowSlots) {
             $this->showFreeSlotsMenu($chatId, $userId, $locale);
             return;
@@ -511,50 +519,36 @@ class TelegramBotController extends Controller
         $this->answerCallback($cbId);
         
         if (str_starts_with($data, 'done:')) {
-            $slotId = (int) substr($data, 5);
+            $slotId = (int)substr($data, 5);
             
-            /** @var Slot|null $slot */
             $slot = Slot::query()->find($slotId);
             if (!$slot) {
                 $this->sendMessage($chatId, 'Слот не найден.');
-                return;
+                [$text, $replyMarkup] = $this->buildAdminSlotsView(); // сегодня
+            } else {
+                // Отметим как выполненный
+                $slot->is_completed = true;
+                $slot->save();
+                
+                // Дата слота для перерисовки списка
+                $date = $slot->slot_time->copy()->startOfDay();
+                
+                // Уведомим пользователя, если он есть
+                if ($slot->booked_by) {
+                    $timeLabel = $slot->slot_time->format('H:i');
+                    $dateLabel = $slot->slot_time->format('d.m.Y');
+                    
+                    $this->sendMessage(
+                        $slot->booked_by,
+                        "🍕 Ваша пицца на {$dateLabel} {$timeLabel} готова!\n" .
+                        "Забирайте, пока горячая 🔥"
+                    );
+                }
+                
+                [$text, $replyMarkup] = $this->buildAdminSlotsView($date);
             }
             
-            // помечаем выполненным
-            $slot->is_completed = true;
-            $slot->save();
-            
-            // дата для перерисовки /admin_slots
-            $date = $slot->slot_time->copy()->startOfDay();
-            
-            // если есть кому слать — шлём + кнопка "Оставить отзыв"
-            if ($slot->booked_by) {
-                $timeLabel = $slot->slot_time->format('H:i');
-                $dateLabel = $slot->slot_time->format('d.m.Y');
-                
-                $keyboard = [
-                    'inline_keyboard' => [
-                        [
-                            [
-                                'text'          => 'Оставить отзыв ⭐',
-                                'callback_data' => 'review_start:' . $slot->id,
-                            ],
-                        ],
-                    ],
-                ];
-                
-                $this->sendMessage(
-                    $slot->booked_by,
-                    "🍕 Ваша пицца на {$dateLabel} {$timeLabel} готова!\n" .
-                    "Забирайте, пока горячая 🔥",
-                    $keyboard
-                );
-            }
-            
-            // перерисовываем список слотов у админа
-            [$text, $replyMarkup] = $this->buildAdminSlotsView($date);
-            
-            if ($messageId) {
+            if ($messageId ?? null) {
                 $params = [
                     'chat_id'    => $chatId,
                     'message_id' => $messageId,
@@ -1033,29 +1027,7 @@ class TelegramBotController extends Controller
             $this->startReviewFlow($chatId, $userId);
             return;
         }
-        if (str_starts_with($data, 'review_start:')) {
-            $slotId = (int) substr($data, strlen('review_start:'));
-            
-            /** @var Slot|null $slot */
-            $slot = Slot::query()->find($slotId);
-            if (!$slot || !$slot->booked_by || $slot->booked_by != $userId) {
-                $this->sendMessage($chatId, 'Не удалось найти ваш заказ для отзыва 🙈');
-                return;
-            }
-            
-            // сохраняем состояние "пишем отзыв"
-            $this->saveState($userId, 'review', [
-                'slot_id' => $slotId,
-            ]);
-            
-            $this->sendMessage(
-                $chatId,
-                "Расскажите, как вам пицца 🍕\n" .
-                "Напишите отзыв одним сообщением: вкус, начинка, тесто — что понравилось или нет."
-            );
-            
-            return;
-        }
+        
         if ($data === 'show_reviews') {
             $this->showReviews($chatId);
             return;
@@ -2593,4 +2565,41 @@ class TelegramBotController extends Controller
         $this->sendMessage($chatId, implode("\n", $lines));
     }
     
+    protected function tForUser(int $userId, string $key, array $replace = []): string
+    {
+        $lang = $this->getUserLocale($userId); // ru|en
+        return __($key, $replace, $lang);
+    }
+    protected function getUserLocale(int $userId): string
+    {
+        /** @var TelegramUser|null $user */
+        $user = TelegramUser::find($userId);
+        
+        // 1) Явно выбранный язык (если ты его куда-то пишешь, напр. в колонку locale)
+        if ($user && !empty($user->locale)) {
+            return $user->locale;
+        }
+        
+        // 2) language_code, который прислал телеграм (ru, en, de, …)
+        if ($user && !empty($user->language_code)) {
+            $code = strtolower($user->language_code);
+            
+            // все «русские» коды сводим к ru
+            if (in_array($code, ['ru', 'uk', 'be', 'ru-ru', 'ru_ru'], true)) {
+                return 'ru';
+            }
+            
+            // всё английское — к en
+            if (str_starts_with($code, 'en')) {
+                return 'en';
+            }
+            
+            // при желании можешь добавить ещё маппинги:
+            // if (str_starts_with($code, 'de')) return 'de';
+        }
+        
+        // 3) дефолт
+        return config('app.locale', 'ru');
+    }
 }
+

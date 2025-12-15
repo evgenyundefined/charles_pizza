@@ -50,5 +50,14 @@ return [
     'language_set'       => 'Language changed to :lang 👌',
     'lang_ru_label'      => 'Русский',
     'lang_en_label'      => 'English',
+    'btn_leave_review' => 'Leave a review ⭐',
+    'btn_reviews'      => 'Reviews ⭐',
     
+    // Reviews
+    'reviews.no_completed_orders' => "You don't have any completed orders without a review yet 😊\nAs soon as you try the pizza, tap “Leave a review ⭐” or use /review.",
+    'reviews.choose_order'        => "Choose the order you’d like to review:",
+    'reviews.ask_text'            => "Please write a short review about the pizza, vibe or service.\nOne message is best — it’s easier to read 🙂",
+    'reviews.thanks'              => "Thank you for your review! ⭐",
+    'reviews.none_yet'            => "There are no reviews yet — you can be the first one! ⭐\nAfter your order, tap “Leave a review ⭐”.",
+    'reviews.list_title'          => "📜 Latest reviews:",
 ];
