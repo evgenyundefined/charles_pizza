@@ -5,14 +5,23 @@ return [
     'btn_orders_history'  => 'Order history 📜',
     'btn_change_language' => '🌐 Language',
     
-    'main_menu_text' => "Hi! We are baking spicy Pepperoni! \n
-Hot, juicy, with that crispy crust — for those who love some 🔥 \n
-Maximum booking — up to 5 pizzas.  \n
-Pickup time — by the last booked slot.  \n
-📍 Pickup point:  \n
-Budva, covered parking near TABU cafe  \n
-(location by link)  \n
-https://maps.app.goo.gl/sPGaRSRLdqUnehT6A \n",
+    'main_menu_text' => "Hi! Tomorrow, 16.12 (Tuesday) we’ll turn the oven back on\n"
+        . "and cook our “Chicken Barbecue” pizza 🍕\n\n"
+        . "Tender chicken fillet in a mild BBQ sauce with a light smoky note,\n"
+        . "melting mozzarella and a thin crispy crust straight from the oven.\n"
+        . "It’s a warm, cozy, no-rush kind of pizza — just good food and good mood.\n\n"
+        . "🕰 Format\n"
+        . "• 1 time slot = 1 pizza\n"
+        . "• Maximum booking – up to 5 pizzas in a row\n"
+        . "• Pickup time – by the last booked slot\n\n"
+        . "💶 Donation – 7 €\n"
+        . "Diameter – 25 cm\n"
+        . "(this is not a sale, but a contribution that covers ingredients,\n"
+        . "the box and equipment work)\n\n"
+        . "📍 Pickup point\n"
+        . "Budva, covered parking between TABU café and Mega\n"
+        . "[tap for location]\n"
+        . "https://maps.app.goo.gl/sPGaRSRLdqUnehT6A",
     
     'main_menu_keyboard_hint' => 'Menu on the keyboard below 👇',
     
