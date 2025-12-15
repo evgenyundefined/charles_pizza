@@ -1081,6 +1081,7 @@ class TelegramBotController extends Controller
         $btnShowSlots     = $this->t('btn_show_slots', [], $locale);
         $btnHistory       = $this->t('btn_orders_history', [], $locale);
         $btnChangeLang    = $this->t('btn_change_language', [], $locale);
+        $btnReviews       = $this->t('btn_reviews', [], $locale);
         
         $inlineKeyboard = [
             'inline_keyboard' => [
@@ -1092,7 +1093,7 @@ class TelegramBotController extends Controller
                 ],
                 [
                    // ['text' => self::BTN_LEAVE_REVIEW, 'callback_data' => 'leave_review'],
-                    ['text' => self::BTN_REVIEWS,      'callback_data' => 'show_reviews'],
+                    ['text' => $btnReviews,     'callback_data' => 'show_reviews'],
                 ],
                 [
                     ['text' => $btnChangeLang,  'callback_data' => 'change_lang'],
@@ -1112,7 +1113,7 @@ class TelegramBotController extends Controller
                 ],
                 [
                 //    ['text' => self::BTN_LEAVE_REVIEW, 'callback_data' => 'leave_review'],
-                    ['text' => self::BTN_REVIEWS,      'callback_data' => 'show_reviews'],
+                    ['text' => $btnReviews,      'callback_data' => 'show_reviews'],
                 ],
                 [
                     ['text' => $btnChangeLang],
