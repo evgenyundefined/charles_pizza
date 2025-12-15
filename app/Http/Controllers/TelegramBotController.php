@@ -1060,29 +1060,6 @@ class TelegramBotController extends Controller
             $this->showReviews($chatId);
             return;
         }
-        if (str_starts_with($data, 'review_start:')) {
-            $slotId = (int) substr($data, strlen('review_start:'));
-            
-            /** @var Slot|null $slot */
-            $slot = Slot::query()->find($slotId);
-            if (!$slot || !$slot->booked_by || $slot->booked_by != $userId) {
-                $this->sendMessage($chatId, 'Не удалось найти ваш заказ для отзыва 🙈');
-                return;
-            }
-            
-            // сохраняем состояние "пишем отзыв"
-            $this->saveState($userId, 'review', [
-                'slot_id' => $slotId,
-            ]);
-            
-            $this->sendMessage(
-                $chatId,
-                "Расскажите, как вам пицца 🍕\n" .
-                "Напишите отзыв одним сообщением: вкус, начинка, тесто — что понравилось или нет."
-            );
-            
-            return;
-        }
     }
     
     /* ================== LOGGING ================== */
@@ -1142,6 +1119,7 @@ class TelegramBotController extends Controller
                     ['text' => $btnHistory,     'callback_data' => 'my_history'],
                 ],
                 [
+                    ['text' => self::BTN_LEAVE_REVIEW, 'callback_data' => 'leave_review'],
                     ['text' => self::BTN_REVIEWS,      'callback_data' => 'show_reviews'],
                 ],
                 [
