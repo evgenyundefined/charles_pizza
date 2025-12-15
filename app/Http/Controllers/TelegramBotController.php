@@ -511,36 +511,50 @@ class TelegramBotController extends Controller
         $this->answerCallback($cbId);
         
         if (str_starts_with($data, 'done:')) {
-            $slotId = (int)substr($data, 5);
+            $slotId = (int) substr($data, 5);
             
+            /** @var Slot|null $slot */
             $slot = Slot::query()->find($slotId);
             if (!$slot) {
                 $this->sendMessage($chatId, 'Слот не найден.');
-                [$text, $replyMarkup] = $this->buildAdminSlotsView(); // сегодня
-            } else {
-                // Отметим как выполненный
-                $slot->is_completed = true;
-                $slot->save();
-                
-                // Дата слота для перерисовки списка
-                $date = $slot->slot_time->copy()->startOfDay();
-                
-                // Уведомим пользователя, если он есть
-                if ($slot->booked_by) {
-                    $timeLabel = $slot->slot_time->format('H:i');
-                    $dateLabel = $slot->slot_time->format('d.m.Y');
-                    
-                    $this->sendMessage(
-                        $slot->booked_by,
-                        "🍕 Ваша пицца на {$dateLabel} {$timeLabel} готова!\n" .
-                        "Забирайте, пока горячая 🔥"
-                    );
-                }
-                
-                [$text, $replyMarkup] = $this->buildAdminSlotsView($date);
+                return;
             }
             
-            if ($messageId ?? null) {
+            // помечаем выполненным
+            $slot->is_completed = true;
+            $slot->save();
+            
+            // дата для перерисовки /admin_slots
+            $date = $slot->slot_time->copy()->startOfDay();
+            
+            // если есть кому слать — шлём + кнопка "Оставить отзыв"
+            if ($slot->booked_by) {
+                $timeLabel = $slot->slot_time->format('H:i');
+                $dateLabel = $slot->slot_time->format('d.m.Y');
+                
+                $keyboard = [
+                    'inline_keyboard' => [
+                        [
+                            [
+                                'text'          => 'Оставить отзыв ⭐',
+                                'callback_data' => 'review_start:' . $slot->id,
+                            ],
+                        ],
+                    ],
+                ];
+                
+                $this->sendMessage(
+                    $slot->booked_by,
+                    "🍕 Ваша пицца на {$dateLabel} {$timeLabel} готова!\n" .
+                    "Забирайте, пока горячая 🔥",
+                    $keyboard
+                );
+            }
+            
+            // перерисовываем список слотов у админа
+            [$text, $replyMarkup] = $this->buildAdminSlotsView($date);
+            
+            if ($messageId) {
                 $params = [
                     'chat_id'    => $chatId,
                     'message_id' => $messageId,
@@ -1044,6 +1058,29 @@ class TelegramBotController extends Controller
         }
         if ($data === 'show_reviews') {
             $this->showReviews($chatId);
+            return;
+        }
+        if (str_starts_with($data, 'review_start:')) {
+            $slotId = (int) substr($data, strlen('review_start:'));
+            
+            /** @var Slot|null $slot */
+            $slot = Slot::query()->find($slotId);
+            if (!$slot || !$slot->booked_by || $slot->booked_by != $userId) {
+                $this->sendMessage($chatId, 'Не удалось найти ваш заказ для отзыва 🙈');
+                return;
+            }
+            
+            // сохраняем состояние "пишем отзыв"
+            $this->saveState($userId, 'review', [
+                'slot_id' => $slotId,
+            ]);
+            
+            $this->sendMessage(
+                $chatId,
+                "Расскажите, как вам пицца 🍕\n" .
+                "Напишите отзыв одним сообщением: вкус, начинка, тесто — что понравилось или нет."
+            );
+            
             return;
         }
     }
