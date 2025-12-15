@@ -1111,7 +1111,7 @@ class TelegramBotController extends Controller
                     ['text' => $btnHistory],
                 ],
                 [
-                    ['text' => self::BTN_LEAVE_REVIEW, 'callback_data' => 'leave_review'],
+                //    ['text' => self::BTN_LEAVE_REVIEW, 'callback_data' => 'leave_review'],
                     ['text' => self::BTN_REVIEWS,      'callback_data' => 'show_reviews'],
                 ],
                 [
@@ -1128,7 +1128,6 @@ class TelegramBotController extends Controller
             $replyKeyboard
         );
     }
-    
     
     protected function showAdminAllActiveSlots(int $chatId): void
     {
@@ -1175,50 +1174,7 @@ class TelegramBotController extends Controller
         
         $this->sendMessage($chatId, implode("\n", $lines));
     }
-    
-    protected function showFreeSlots($chatId, int $userId): void
-    {
-        $slots = Slot::query()
-            ->where('slot_time', '>', now())
-            ->whereNull('booked_by')
-            ->where('is_disabled', false)
-            ->orderBy('slot_time')
-            ->limit(24)
-            ->get(['id', 'slot_time'])
-            ->map(function (Slot $slot) {
-                return [
-                    'id' => $slot->id,
-                    'slot_time' => $slot->slot_time->toDateTimeString(),
-                ];
-            })
-            ->values()
-            ->all();
-        
-        if (empty($slots)) {
-            $this->sendMessage($chatId, 'Свободных слотов пока нет 😔 Попробуйте позже чуть позже.');
-            return;
-        }
-        
-        $this->saveState($userId, 'select_slots', [
-            'slots' => $slots,
-            'chosen_idx' => [],
-        ]);
-        
-        $lines = ['Свободные слоты на сегодня ⏰:'];
-        /*foreach ($slots as $i => $slot) {
-            $time = Carbon::parse($slot['slot_time'])->format('H:i');
-            $lines[] = " {$time}";
-        }*/
-        $lines[] = '';
-        $lines[] = '👇 Нажмите слоты, которые хотите занять, а ПОТОМ — кнопку «✅ Готово (подтвердить)» внизу.';
-        
-        $replyMarkup = [
-            'inline_keyboard' => $this->buildSlotsKeyboard($slots, []),
-        ];
-        
-        $this->sendMessage($chatId, implode("\n", $lines), $replyMarkup);
-    }
-    
+
     protected function showFreeSlotsMenu(int $chatId, int $userId, ?string $locale = null): void
     {
         $locale = $locale ?: 'ru';
