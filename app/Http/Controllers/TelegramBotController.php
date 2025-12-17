@@ -1346,11 +1346,11 @@ class TelegramBotController extends Controller
             [
                 'text'          => '✅ Готово (подтвердить)',
                 'callback_data' => 'slots_done',
-            ],
+            ]/*,
             [
                 'text'          => '❌ Отмена',
                 'callback_data' => 'cancel',
-            ],
+            ]*/,
         ];
         
         return $rows;
