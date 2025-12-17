@@ -926,62 +926,29 @@ class TelegramBotController extends Controller
                 empty($dataState['slots'] ?? []) ||
                 empty($dataState['chosen_idx'] ?? [])
             ) {
-                $this->sendMessage($chatId, 'Сначала выберите слоты через «Показать свободные слоты 🍕».');
+                $this->sendMessage(
+                    $chatId,
+                    __('telegram.errors.select_slots_first') // или твой текст, можно оставить старый
+                );
                 return;
             }
             
-            // считаем выбранные времена для красоты
-            $slots = $dataState['slots'];
-            $idx = $dataState['chosen_idx'];
-            
-            $chosen = [];
-            foreach ($idx as $n) {
-                if (isset($slots[$n - 1])) {
-                    $chosen[] = $slots[$n - 1];
-                }
-            }
-            
-            $times = array_map(
-                fn($s) => \Carbon\Carbon::parse($s['slot_time'])->format('H:i'),
-                $chosen
+            // сразу подтверждаем бронь БЕЗ комментария
+            $this->confirmBooking(
+                $chatId,
+                $userId,
+                $username,
+                $dataState,
+                $messageId ?? null,
+                null // комментарий отключён
             );
-            $timesText = implode(', ', $times);
             
-            // запомним message_id, чтобы потом этим же сообщением показать "Готово!"
-            if (($messageId ?? null) !== null) {
-                $dataState['message_id'] = $messageId;
-            }
-            
-            // сразу переходим к выбору "хочу комментарий / нет"
-            $this->saveState($userId, 'comment_choice', $dataState);
-            
-            $text = "Вы выбрали слоты ⏰: {$timesText}\n";
-            
-            $keyboard = [
-                'inline_keyboard' => [
-                    [
-                        ['text' => 'Хочу добавить комментарий 💬', 'callback_data' => 'comment_yes'],
-                    ],
-                    [
-                        ['text' => 'Нет, без комментария ✅', 'callback_data' => 'comment_no'],
-                    ],
-                ],
-            ];
-            
-            if (($messageId ?? null) !== null) {
-                $this->tg('editMessageText', [
-                    'chat_id' => $chatId,
-                    'message_id' => $messageId,
-                    'text' => $text,
-                    'parse_mode' => 'HTML',
-                    'reply_markup' => json_encode($keyboard, JSON_UNESCAPED_UNICODE),
-                ]);
-            } else {
-                $this->sendMessage($chatId, $text, $keyboard);
-            }
+            // очищаем состояние
+            $this->clearState($userId);
             
             return;
         }
+        
         if ($data === 'comment_yes') {
             $state = $this->loadState($userId);
             $dataState = $state['data'] ?? [];
