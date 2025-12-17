@@ -1250,10 +1250,10 @@ class TelegramBotController extends Controller
             ]];
         }
         
-        $keyboard['inline_keyboard'][] = [[
+        /*$keyboard['inline_keyboard'][] = [[
             'text' => 'Отмена ❌',
             'callback_data' => 'cancel_choose_date',
-        ]];
+        ]];*/
         
         $this->sendMessage($chatId, $text, $keyboard);
     }
