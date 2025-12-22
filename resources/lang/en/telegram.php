@@ -9,22 +9,21 @@ return [
     'btn_leave_review'  => 'Leave a review ⭐',
     'btn_reviews'       => 'Reviews ⭐',
     'btn_language'      => 'Language 🌐',
-    'main_menu_text' => "16.12 (Tuesday) we’re firing up the oven again
-and making BBQ Chicken pizza 🍕
+    'main_menu_text' => "23.12 (Tuesday), we’re firing up the oven
+and making “Margherita & Two Cheeses” pizza 🍕
 
 🕰 Format
 • 1 time slot = 1 pizza
 • Maximum booking — up to 5 pizzas in a row
-• Pick-up time is based on your last booked slot
+• Pick-up time — at the last slot of your booking
 
-💶 Donation — 7 €
+💶 Donation — €6
 Diameter — 25 cm
-(this is not a sale, but a contribution that covers ingredients, box and equipment costs)
+(This is not a sale, but a contribution that covers ingredients, the box, and equipment operation.)
 
-📍 Pickup point
-Budva, covered parking between TABU café and Mega
-[tap for location]
-https://maps.app.goo.gl/sPGaRSRLdqUnehT6A",
+📍 Pick-up location
+WaxBrew coffee shop
+https://maps.app.goo.gl/b5iBpADFtVQxXjZo9",
     
     'main_menu_keyboard_hint' => 'Menu on the keyboard below 👇',
     
