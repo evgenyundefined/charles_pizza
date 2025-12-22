@@ -1938,7 +1938,7 @@ class TelegramBotController extends Controller
         
         // 3) Диапазон времени (можно под себя подправить)
         $start = $date->copy()->setTime(14, 0); // 15:00
-        $end = $date->copy()->setTime(19, 0); // 20:00
+        $end = $date->copy()->setTime(19, 10); // 20:00
         
         $created = 0;
         
