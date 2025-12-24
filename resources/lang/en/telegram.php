@@ -27,7 +27,7 @@ https://maps.app.goo.gl/b5iBpADFtVQxXjZo9",
     
     'main_menu_keyboard_hint' => 'Menu on the keyboard below 👇',
     
-    'no_free_slots'        => 'Следи за анонсами @prana_pizza',
+    'no_free_slots'        => 'Свободных слотов нет. Следи за анонсами @prana_pizza',
     'choose_date'          => 'Choose a date for booking 📅',
     'free_slots_for_date'  => 'Free slots for :date ⏰ (1 slot = 1 pizza):',
     'select_slots_hint'    => '👇 Tap the slots you want and THEN tap “✅ Done (confirm)” below.',
