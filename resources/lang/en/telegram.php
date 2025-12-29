@@ -9,20 +9,17 @@ return [
     'btn_leave_review'  => 'Leave a review ⭐',
     'btn_reviews'       => 'Reviews ⭐',
     'btn_language'      => 'Language 🌐',
-    'main_menu_text' => "23.12 (Tuesday), we’re firing up the oven
-and making “Margherita & Two Cheeses” pizza 🍕
-
-🕰 Format
-• 1 time slot = 1 pizza
-• Maximum booking — up to 5 pizzas in a row
-• Pick-up time — at the last slot of your booking
-
-💶 Donation — €6
-Diameter — 25 cm
-(This is not a sale, but a contribution that covers ingredients, the box, and equipment operation.)
-
-📍 Pick-up location
-WaxBrew coffee shop
+    'main_menu_text' => "30.12 (вторник), включаем печь
+и готовим пиццу «Рваная говядина» 🍕
+🕰 Формат
+• 1 тайм-слот = 1 пицца
+• Максимальная бронь — до 5 пицц подряд
+• Время выдачи — по последнему слоту брони
+💶 Донат — 8 €
+Диаметр — 25 см
+(это не продажа, а вклад, который покрывает продукты, коробку и работу оборудования)
+📍 Точка выдачи
+Кофейня WaxBrew
 https://maps.app.goo.gl/b5iBpADFtVQxXjZo9",
     
     'main_menu_keyboard_hint' => 'Menu on the keyboard below 👇',
