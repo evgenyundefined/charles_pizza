@@ -10,7 +10,21 @@ return [
     'btn_orders_history'  => 'История заказов 📜',
     'btn_change_language' => 'Язык 🌐',
 
-    'main_menu_text' => "tRuH7Iy8tjoN11R5",
+    'main_menu_text' => "Подробности о пицце на сегодня и размере доната — @prana_pizza 🍕
+
+🕰 Формат
+Диаметр пиццы — 25 см
+
+• 1 тайм-слот = 1 пицца
+• Максимальная бронь — до 5 пицц подряд
+• Время выдачи — по последнему забронированному слоту
+
+📍 Точка выдачи
+Кофейня WaxBrew ☕️
+https://maps.app.goo.gl/b5iBpADFtVQxXjZo9
+
+WaxBrew Specialty Coffee & Vinyl/Textura · Prve Proleterske, Budva, Montenegro (https://maps.app.goo.gl/b5iBpADFtVQxXjZo9)
+★★★★★ · Coffee shop",
 
     'main_menu_keyboard_hint' => 'Меню на клавиатуре снизу 👇',
 
